@@ -270,4 +270,4 @@ Do **not** open a public issue for security vulnerabilities. Email
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 TechnoNext Software Ltd.
+[MIT](LICENSE) — Copyright (c) 2026 Siyam Sarker
