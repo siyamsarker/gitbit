@@ -380,8 +380,7 @@ cd gitbit
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-pip install pytest pytest-cov pytest-mock flake8 black isort mypy pre-commit
-pre-commit install
+pip install pytest pytest-cov pytest-mock flake8 black isort mypy
 ```
 
 ### Running tests
