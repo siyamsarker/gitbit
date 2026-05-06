@@ -36,16 +36,15 @@ cd gitbit
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# 3. Install
-pip install -e .
+# 3. Install dependencies
+pip install -r requirements.txt
 ```
 
-The `gitbit` command is now available in your terminal.
+That's it. Run the tool with:
 
-> **For contributors** — install dev tools too:
-> ```bash
-> pip install -e ".[dev]"
-> ```
+```bash
+python -m gitbit --help
+```
 
 ---
 
@@ -54,7 +53,7 @@ The `gitbit` command is now available in your terminal.
 ### Ad-hoc single repo (no config file)
 
 ```bash
-gitbit sync \
+python -m gitbit sync \
   --source git@github.com:org/my-repo.git \
   --dest   git@backup.example.com:mirrors/my-repo.git \
   --name   my-repo
@@ -79,11 +78,11 @@ export GITLAB_TOKEN=glpat-xxxxxxxxxxxx
 
 ```bash
 # Import + export in one step
-gitbit sync-all -c repos.json
+python -m gitbit sync-all -c repos.json
 
 # Or split the two phases
-gitbit import-all -c repos.json
-gitbit export-all -c repos.json
+python -m gitbit import-all -c repos.json
+python -m gitbit export-all -c repos.json
 ```
 
 ---
@@ -131,7 +130,7 @@ gitbit export-all -c repos.json
 ## CLI reference
 
 ```
-Usage: gitbit [OPTIONS] COMMAND [ARGS]...
+Usage: python -m gitbit [OPTIONS] COMMAND [ARGS]...
 
   gitbit — mirror Git repositories with full ref fidelity.
 
@@ -159,7 +158,7 @@ Commands:
 ### sync (ad-hoc)
 
 ```bash
-gitbit sync \
+python -m gitbit sync \
   --source <URL> \
   --dest   <URL> \
   [--name  NAME] \
@@ -199,12 +198,13 @@ git clone https://github.com/siyam-sarker/gitbit.git
 cd gitbit
 ```
 
-**2. Create a virtual environment and install dev dependencies**
+**2. Create a virtual environment and install dependencies**
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -r requirements.txt
+pip install pytest pytest-cov pytest-mock flake8 black isort mypy pre-commit
 ```
 
 **3. Install pre-commit hooks**
