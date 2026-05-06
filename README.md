@@ -29,7 +29,7 @@ syncing, and automatic retries.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/gitbit.git
+git clone https://github.com/siyam-sarker/gitbit.git
 cd gitbit
 
 # 2. Create and activate a virtual environment
@@ -133,17 +133,17 @@ gitbit export-all -c repos.json
 ```
 Usage: gitbit [OPTIONS] COMMAND [ARGS]...
 
-  Gitbit — mirror Git repositories with full ref fidelity.
+  gitbit — mirror Git repositories with full ref fidelity.
 
 Options:
   --version  Show the version and exit.
   --help     Show this message and exit.
 
 Commands:
+  export-all  Push all local mirrors to their destinations.
+  import-all  Clone or fetch all source repos into local mirrors.
   sync        Mirror a single repo ad-hoc (no config file needed).
   sync-all    Import and export all repositories defined in config.
-  import-all  Clone or fetch all source repos into local mirrors.
-  export-all  Push all local mirrors to their destinations.
 ```
 
 ### Common flags (sync-all / import-all / export-all)
@@ -195,7 +195,7 @@ Be respectful and constructive. We follow the
 **1. Fork and clone**
 
 ```bash
-git clone https://github.com/your-org/gitbit.git
+git clone https://github.com/siyam-sarker/gitbit.git
 cd gitbit
 ```
 
@@ -269,7 +269,7 @@ test: cover DiskSpaceError path in clone_mirror
 ### Reporting security issues
 
 Do **not** open a public issue for security vulnerabilities. Email
-`security@example.com` with a description and reproduction steps.
+`siyam.ts@gmail.com` with a description and reproduction steps.
 
 ---
 
