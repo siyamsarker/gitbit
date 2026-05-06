@@ -36,10 +36,7 @@ cd gitbit
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Install the CLI
+# 3. Install
 pip install -e .
 ```
 
@@ -47,7 +44,7 @@ The `gitbit` command is now available in your terminal.
 
 > **For contributors** — install dev tools too:
 > ```bash
-> pip install -r requirements-dev.txt
+> pip install -e ".[dev]"
 > ```
 
 ---
@@ -207,8 +204,7 @@ cd gitbit
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements-dev.txt
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 **3. Install pre-commit hooks**
