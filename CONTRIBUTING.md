@@ -70,7 +70,7 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 feat: add --format flag to sync command
 fix: handle empty token_env in inject_https_token
 chore: bump tenacity to 8.3
-docs: add Docker usage example to README
+docs: update README with new config examples
 test: cover DiskSpaceError path in clone_mirror
 ```
 

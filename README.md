@@ -1,13 +1,12 @@
 # git-mirror
 
-[![CI](https://github.com/your-org/git-mirror/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/git-mirror/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/git-mirror)](https://pypi.org/project/git-mirror/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/pypi/pyversions/git-mirror)](https://pypi.org/project/git-mirror/)
 
 A production-ready CLI tool for mirroring Git repositories with **full ref fidelity** — all
 branches, tags, and notes are preserved. Supports SSH and HTTPS authentication, Git LFS, concurrent
-syncing, automatic retries, and Docker deployment.
+syncing, and automatic retries.
 
 ---
 
@@ -34,19 +33,6 @@ pip install git-mirror
 ```
 
 Requires Python ≥ 3.9, `git` in `$PATH`, and (optionally) `git-lfs`.
-
-### Docker
-
-```bash
-docker pull ghcr.io/your-org/git-mirror:latest
-
-docker run --rm \
-  -v "$HOME/.ssh:/root/.ssh:ro" \
-  -v "$(pwd)/repos.json:/app/repos.json:ro" \
-  -v "$HOME/.git-mirror:/root/.git-mirror" \
-  ghcr.io/your-org/git-mirror:latest \
-  sync-all -c /app/repos.json
-```
 
 ### From source
 
