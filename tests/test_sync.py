@@ -1,13 +1,13 @@
-"""Tests for git_mirror.sync."""
+"""Tests for gitbit.sync."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from git_mirror.config import AuthConfig, RepoConfig
-from git_mirror.exceptions import GitOperationError
-from git_mirror.sync import (
+from gitbit.config import AuthConfig, RepoConfig
+from gitbit.exceptions import GitOperationError
+from gitbit.sync import (
     RepoResult,
     export_repo,
     import_repo,
@@ -33,8 +33,8 @@ def _make_repo(name: str = "TestRepo", lfs: bool = False) -> RepoConfig:
 
 class TestImportRepo:
     def test_clones_when_local_dir_missing(self, mocker, tmp_path: Path) -> None:
-        mock_clone = mocker.patch("git_mirror.sync.git_ops.clone_mirror")
-        mock_fetch = mocker.patch("git_mirror.sync.git_ops.fetch_mirror")
+        mock_clone = mocker.patch("gitbit.sync.git_ops.clone_mirror")
+        mock_fetch = mocker.patch("gitbit.sync.git_ops.fetch_mirror")
         repo = _make_repo()
         result = import_repo(repo, str(tmp_path), timeout=60, dry_run=False)
         mock_clone.assert_called_once()
@@ -43,8 +43,8 @@ class TestImportRepo:
         assert result.name == "TestRepo"
 
     def test_fetches_when_local_dir_exists(self, mocker, tmp_path: Path) -> None:
-        mock_clone = mocker.patch("git_mirror.sync.git_ops.clone_mirror")
-        mock_fetch = mocker.patch("git_mirror.sync.git_ops.fetch_mirror")
+        mock_clone = mocker.patch("gitbit.sync.git_ops.clone_mirror")
+        mock_fetch = mocker.patch("gitbit.sync.git_ops.fetch_mirror")
         # Create the mirror directory so it appears to exist
         local_dir = tmp_path / "TestRepo.git"
         local_dir.mkdir()
@@ -55,23 +55,23 @@ class TestImportRepo:
         assert result.success is True
 
     def test_lfs_fetch_called_when_lfs_true(self, mocker, tmp_path: Path) -> None:
-        mocker.patch("git_mirror.sync.git_ops.clone_mirror")
-        mock_lfs = mocker.patch("git_mirror.sync.git_ops.lfs_fetch_all")
+        mocker.patch("gitbit.sync.git_ops.clone_mirror")
+        mock_lfs = mocker.patch("gitbit.sync.git_ops.lfs_fetch_all")
         repo = _make_repo(lfs=True)
         result = import_repo(repo, str(tmp_path), timeout=60, dry_run=False)
         mock_lfs.assert_called_once()
         assert result.success is True
 
     def test_lfs_fetch_not_called_when_lfs_false(self, mocker, tmp_path: Path) -> None:
-        mocker.patch("git_mirror.sync.git_ops.clone_mirror")
-        mock_lfs = mocker.patch("git_mirror.sync.git_ops.lfs_fetch_all")
+        mocker.patch("gitbit.sync.git_ops.clone_mirror")
+        mock_lfs = mocker.patch("gitbit.sync.git_ops.lfs_fetch_all")
         repo = _make_repo(lfs=False)
         import_repo(repo, str(tmp_path), timeout=60, dry_run=False)
         mock_lfs.assert_not_called()
 
     def test_git_operation_error_returns_failure_result(self, mocker, tmp_path: Path) -> None:
         mocker.patch(
-            "git_mirror.sync.git_ops.clone_mirror",
+            "gitbit.sync.git_ops.clone_mirror",
             side_effect=GitOperationError("clone failed"),
         )
         repo = _make_repo()
@@ -80,7 +80,7 @@ class TestImportRepo:
         assert "clone failed" in result.message
 
     def test_dry_run_still_returns_success(self, mocker, tmp_path: Path) -> None:
-        mock_clone = mocker.patch("git_mirror.sync.git_ops.clone_mirror")
+        mock_clone = mocker.patch("gitbit.sync.git_ops.clone_mirror")
         repo = _make_repo()
         result = import_repo(repo, str(tmp_path), timeout=60, dry_run=True)
         mock_clone.assert_called_once()
@@ -96,7 +96,7 @@ class TestExportRepo:
     def test_push_called_when_local_dir_exists(self, mocker, tmp_path: Path) -> None:
         local_dir = tmp_path / "TestRepo.git"
         local_dir.mkdir()
-        mock_push = mocker.patch("git_mirror.sync.git_ops.push_mirror")
+        mock_push = mocker.patch("gitbit.sync.git_ops.push_mirror")
         repo = _make_repo()
         result = export_repo(repo, str(tmp_path), timeout=60, dry_run=False)
         mock_push.assert_called_once()
@@ -110,7 +110,7 @@ class TestExportRepo:
 
     def test_dry_run_skips_existence_check(self, mocker, tmp_path: Path) -> None:
         # local_dir does NOT exist but dry_run=True — should still proceed
-        mock_push = mocker.patch("git_mirror.sync.git_ops.push_mirror")
+        mock_push = mocker.patch("gitbit.sync.git_ops.push_mirror")
         repo = _make_repo()
         result = export_repo(repo, str(tmp_path), timeout=60, dry_run=True)
         mock_push.assert_called_once()
@@ -119,8 +119,8 @@ class TestExportRepo:
     def test_lfs_push_called_when_lfs_true(self, mocker, tmp_path: Path) -> None:
         local_dir = tmp_path / "LFSRepo.git"
         local_dir.mkdir()
-        mocker.patch("git_mirror.sync.git_ops.push_mirror")
-        mock_lfs = mocker.patch("git_mirror.sync.git_ops.lfs_push_all")
+        mocker.patch("gitbit.sync.git_ops.push_mirror")
+        mock_lfs = mocker.patch("gitbit.sync.git_ops.lfs_push_all")
         repo = _make_repo(name="LFSRepo", lfs=True)
         result = export_repo(repo, str(tmp_path), timeout=60, dry_run=False)
         mock_lfs.assert_called_once()
@@ -129,8 +129,8 @@ class TestExportRepo:
     def test_lfs_push_not_called_when_lfs_false(self, mocker, tmp_path: Path) -> None:
         local_dir = tmp_path / "TestRepo.git"
         local_dir.mkdir()
-        mocker.patch("git_mirror.sync.git_ops.push_mirror")
-        mock_lfs = mocker.patch("git_mirror.sync.git_ops.lfs_push_all")
+        mocker.patch("gitbit.sync.git_ops.push_mirror")
+        mock_lfs = mocker.patch("gitbit.sync.git_ops.lfs_push_all")
         repo = _make_repo(lfs=False)
         export_repo(repo, str(tmp_path), timeout=60, dry_run=False)
         mock_lfs.assert_not_called()
@@ -139,7 +139,7 @@ class TestExportRepo:
         local_dir = tmp_path / "TestRepo.git"
         local_dir.mkdir()
         mocker.patch(
-            "git_mirror.sync.git_ops.push_mirror",
+            "gitbit.sync.git_ops.push_mirror",
             side_effect=GitOperationError("push failed"),
         )
         repo = _make_repo()
@@ -156,11 +156,11 @@ class TestExportRepo:
 class TestSyncRepo:
     def test_sync_calls_import_then_export(self, mocker, tmp_path: Path) -> None:
         mock_import = mocker.patch(
-            "git_mirror.sync.import_repo",
+            "gitbit.sync.import_repo",
             return_value=RepoResult(name="R", success=True, message="import ok"),
         )
         mock_export = mocker.patch(
-            "git_mirror.sync.export_repo",
+            "gitbit.sync.export_repo",
             return_value=RepoResult(name="R", success=True, message="export ok"),
         )
         repo = _make_repo()
@@ -171,10 +171,10 @@ class TestSyncRepo:
 
     def test_sync_short_circuits_on_import_failure(self, mocker, tmp_path: Path) -> None:
         mocker.patch(
-            "git_mirror.sync.import_repo",
+            "gitbit.sync.import_repo",
             return_value=RepoResult(name="R", success=False, message="import failed"),
         )
-        mock_export = mocker.patch("git_mirror.sync.export_repo")
+        mock_export = mocker.patch("gitbit.sync.export_repo")
         repo = _make_repo()
         result = sync_repo(repo, str(tmp_path), timeout=60, dry_run=False)
         mock_export.assert_not_called()
@@ -240,7 +240,7 @@ class TestPrintSummary:
             RepoResult(name="A", success=True, message="ok"),
             RepoResult(name="B", success=False, message="err"),
         ]
-        with caplog.at_level(logging.INFO, logger="git_mirror.sync"):
+        with caplog.at_level(logging.INFO, logger="gitbit.sync"):
             print_summary(results)
         assert "1 succeeded" in caplog.text
         assert "1 failed" in caplog.text

@@ -1,4 +1,4 @@
-"""Core Git operations for git-mirror using subprocess (no shell=True)."""
+"""Core Git operations for gitbit using subprocess (no shell=True)."""
 from __future__ import annotations
 
 import logging

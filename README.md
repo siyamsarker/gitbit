@@ -1,8 +1,8 @@
-# git-mirror
+# Gitbit
 
-[![PyPI](https://img.shields.io/pypi/v/git-mirror)](https://pypi.org/project/git-mirror/)
+[![PyPI](https://img.shields.io/pypi/v/gitbit)](https://pypi.org/project/gitbit/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/pypi/pyversions/git-mirror)](https://pypi.org/project/git-mirror/)
+[![Python](https://img.shields.io/pypi/pyversions/gitbit)](https://pypi.org/project/gitbit/)
 
 A production-ready CLI tool for mirroring Git repositories with **full ref fidelity** — all
 branches, tags, and notes are preserved. Supports SSH and HTTPS authentication, Git LFS, concurrent
@@ -29,7 +29,7 @@ syncing, and automatic retries.
 ### pip
 
 ```bash
-pip install git-mirror
+pip install gitbit
 ```
 
 Requires Python ≥ 3.9, `git` in `$PATH`, and (optionally) `git-lfs`.
@@ -37,8 +37,8 @@ Requires Python ≥ 3.9, `git` in `$PATH`, and (optionally) `git-lfs`.
 ### From source
 
 ```bash
-git clone https://github.com/your-org/git-mirror.git
-cd git-mirror
+git clone https://github.com/your-org/gitbit.git
+cd gitbit
 pip install -e ".[dev]"
 ```
 
@@ -49,7 +49,7 @@ pip install -e ".[dev]"
 ### Ad-hoc single repo (no config file)
 
 ```bash
-git-mirror sync \
+gitbit sync \
   --source git@github.com:org/my-repo.git \
   --dest   git@backup.example.com:mirrors/my-repo.git \
   --name   my-repo
@@ -74,11 +74,11 @@ export GITLAB_TOKEN=glpat-xxxxxxxxxxxx
 
 ```bash
 # Import + export in one step
-git-mirror sync-all -c repos.json
+gitbit sync-all -c repos.json
 
 # Or split the two phases
-git-mirror import-all -c repos.json
-git-mirror export-all -c repos.json
+gitbit import-all -c repos.json
+gitbit export-all -c repos.json
 ```
 
 ---
@@ -93,7 +93,7 @@ git-mirror export-all -c repos.json
     "parallel": 4,          // max concurrent repos (1–32, default 4)
     "timeout": 300,         // per-repo timeout in seconds (default 300)
     "verbose": false,       // enable DEBUG logging (default false)
-    "mirrors_dir": "~/.git-mirror/mirrors"  // local mirror storage root
+    "mirrors_dir": "~/.gitbit/mirrors"  // local mirror storage root
   },
   "repos": [
     {
@@ -126,9 +126,9 @@ git-mirror export-all -c repos.json
 ## CLI reference
 
 ```
-Usage: git-mirror [OPTIONS] COMMAND [ARGS]...
+Usage: gitbit [OPTIONS] COMMAND [ARGS]...
 
-  git-mirror — mirror Git repositories with full ref fidelity.
+  Gitbit — mirror Git repositories with full ref fidelity.
 
 Options:
   --version  Show the version and exit.
@@ -154,7 +154,7 @@ Commands:
 ### sync (ad-hoc)
 
 ```bash
-git-mirror sync \
+gitbit sync \
   --source <URL> \
   --dest   <URL> \
   [--name  NAME] \
@@ -178,10 +178,96 @@ git-mirror sync \
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Thank you for considering a contribution. This section covers the essentials.
+
+### Code of Conduct
+
+Be respectful and constructive. We follow the
+[Contributor Covenant](https://www.contributor-covenant.org/) v2.1.
+
+### Getting started
+
+**1. Fork and clone**
+
+```bash
+git clone https://github.com/your-org/gitbit.git
+cd gitbit
+```
+
+**2. Create a virtual environment and install dev dependencies**
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+```
+
+**3. Install pre-commit hooks**
+
+```bash
+pre-commit install
+```
+
+Hooks run automatically on `git commit`: trailing whitespace, EOF fixer,
+YAML/JSON checks, Black, isort, and flake8.
+
+### Coding standards
+
+| Tool | Config |
+|------|--------|
+| Formatter | `black` — line length 100 |
+| Import sorter | `isort` — `black` profile |
+| Linter | `flake8` — see `.flake8` |
+| Type checker | `mypy --strict` |
+
+- Use `from __future__ import annotations` in any module that uses `X | Y` union syntax.
+- All subprocess calls must pass a **list** of arguments — never `shell=True`.
+- Credentials must never appear in log output. Use `safe_url()` for any URL logged.
+- New public functions should have a one-line docstring at minimum.
+
+### Running tests
+
+```bash
+# All tests with coverage
+pytest
+
+# A single module
+pytest tests/test_config.py -v
+
+# With debug logging visible
+pytest -s --log-cli-level=DEBUG
+```
+
+Coverage must remain at or above 90% for a PR to be accepted.
+
+### Commit style
+
+We use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat: add --format flag to sync command
+fix: handle empty token_env in inject_https_token
+chore: bump tenacity to 8.3
+docs: update README with new config examples
+test: cover DiskSpaceError path in clone_mirror
+```
+
+### Pull request process
+
+1. Open an issue first for non-trivial changes.
+2. Branch off `main`: `git checkout -b feat/my-feature`.
+3. Write tests for any new behaviour or bug fix.
+4. Ensure `flake8`, `mypy`, and `pytest` all pass locally.
+5. Open a PR against `main` with a clear description of what and why.
+6. At least one maintainer review is required before merging.
+
+### Reporting security issues
+
+Do **not** open a public issue for security vulnerabilities. Email
+`security@example.com` with a description and reproduction steps.
 
 ---
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 git-mirror contributors.
+[MIT](LICENSE) — Copyright (c) 2026 Gitbit contributors.

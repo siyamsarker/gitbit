@@ -3,7 +3,7 @@
     "parallel": 4,
     "timeout": 300,
     "verbose": false,
-    "mirrors_dir": "~/.git-mirror/mirrors"
+    "mirrors_dir": "~/.gitbit/mirrors"
   },
   "repos": [
     {

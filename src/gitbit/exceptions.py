@@ -1,8 +1,8 @@
-"""Exception hierarchy for git-mirror."""
+"""Exception hierarchy for gitbit."""
 
 
 class GitMirrorError(Exception):
-    """Base exception for all git-mirror errors."""
+    """Base exception for all gitbit errors."""
 
 
 class ConfigError(GitMirrorError):

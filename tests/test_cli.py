@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from git_mirror.cli import main
-from git_mirror.sync import RepoResult
+from gitbit.cli import main
+from gitbit.sync import RepoResult
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ class TestMainGroup:
         runner = CliRunner()
         result = runner.invoke(main, ["--help"])
         assert result.exit_code == 0
-        assert "git-mirror" in result.output
+        assert "gitbit" in result.output
 
     def test_no_args_shows_usage(self):
         runner = CliRunner()
@@ -78,8 +78,8 @@ class TestSyncAll:
     def test_success_exits_zero(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
+            "gitbit.cli.print_summary"
         ):
             result = runner.invoke(main, ["sync-all", "-c", config])
         assert result.exit_code == 0
@@ -90,8 +90,8 @@ class TestSyncAll:
     def test_all_failures_exits_one(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_fail()]), patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_fail()]), patch(
+            "gitbit.cli.print_summary"
         ):
             result = runner.invoke(main, ["sync-all", "-c", config])
         assert result.exit_code == 1
@@ -100,8 +100,8 @@ class TestSyncAll:
         config = _make_config_file(tmp_path)
         runner = CliRunner()
         with patch(
-            "git_mirror.cli.run_parallel", return_value=[_ok("R1"), _fail("R2")]
-        ), patch("git_mirror.cli.print_summary"):
+            "gitbit.cli.run_parallel", return_value=[_ok("R1"), _fail("R2")]
+        ), patch("gitbit.cli.print_summary"):
             result = runner.invoke(main, ["sync-all", "-c", config])
         assert result.exit_code == 1
 
@@ -114,8 +114,8 @@ class TestSyncAll:
     def test_dry_run_flag_propagated(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
+            "gitbit.cli.print_summary"
         ):
             runner.invoke(main, ["sync-all", "-c", config, "--dry-run"])
         _, kwargs = mock_rp.call_args
@@ -124,8 +124,8 @@ class TestSyncAll:
     def test_parallel_override(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
+            "gitbit.cli.print_summary"
         ):
             runner.invoke(main, ["sync-all", "-c", config, "--parallel", "8"])
         _, kwargs = mock_rp.call_args
@@ -134,8 +134,8 @@ class TestSyncAll:
     def test_timeout_override(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
+            "gitbit.cli.print_summary"
         ):
             runner.invoke(main, ["sync-all", "-c", config, "--timeout", "999"])
         _, kwargs = mock_rp.call_args
@@ -144,8 +144,8 @@ class TestSyncAll:
     def test_config_defaults_used_when_no_overrides(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
+            "gitbit.cli.print_summary"
         ):
             runner.invoke(main, ["sync-all", "-c", config])
         _, kwargs = mock_rp.call_args
@@ -168,8 +168,8 @@ class TestImportAll:
     def test_success_exits_zero(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]), patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]), patch(
+            "gitbit.cli.print_summary"
         ):
             result = runner.invoke(main, ["import-all", "-c", config])
         assert result.exit_code == 0
@@ -177,8 +177,8 @@ class TestImportAll:
     def test_failure_exits_one(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_fail()]), patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_fail()]), patch(
+            "gitbit.cli.print_summary"
         ):
             result = runner.invoke(main, ["import-all", "-c", config])
         assert result.exit_code == 1
@@ -186,8 +186,8 @@ class TestImportAll:
     def test_dry_run_propagated(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
+            "gitbit.cli.print_summary"
         ):
             runner.invoke(main, ["import-all", "-c", config, "--dry-run"])
         _, kwargs = mock_rp.call_args
@@ -201,10 +201,10 @@ class TestImportAll:
     def test_import_repo_fn_is_passed_to_run_parallel(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        from git_mirror import sync as sync_mod
+        from gitbit import sync as sync_mod
 
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
+            "gitbit.cli.print_summary"
         ):
             runner.invoke(main, ["import-all", "-c", config])
         positional_fn = mock_rp.call_args[0][0]
@@ -220,8 +220,8 @@ class TestExportAll:
     def test_success_exits_zero(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]), patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]), patch(
+            "gitbit.cli.print_summary"
         ):
             result = runner.invoke(main, ["export-all", "-c", config])
         assert result.exit_code == 0
@@ -229,8 +229,8 @@ class TestExportAll:
     def test_failure_exits_one(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        with patch("git_mirror.cli.run_parallel", return_value=[_fail()]), patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_fail()]), patch(
+            "gitbit.cli.print_summary"
         ):
             result = runner.invoke(main, ["export-all", "-c", config])
         assert result.exit_code == 1
@@ -243,10 +243,10 @@ class TestExportAll:
     def test_export_repo_fn_is_passed_to_run_parallel(self, tmp_path):
         config = _make_config_file(tmp_path)
         runner = CliRunner()
-        from git_mirror import sync as sync_mod
+        from gitbit import sync as sync_mod
 
-        with patch("git_mirror.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
-            "git_mirror.cli.print_summary"
+        with patch("gitbit.cli.run_parallel", return_value=[_ok()]) as mock_rp, patch(
+            "gitbit.cli.print_summary"
         ):
             runner.invoke(main, ["export-all", "-c", config])
         positional_fn = mock_rp.call_args[0][0]
@@ -261,7 +261,7 @@ class TestExportAll:
 class TestSyncSingle:
     def test_success_prints_message_and_exits_zero(self):
         runner = CliRunner()
-        with patch("git_mirror.cli.sync_repo", return_value=_ok()):
+        with patch("gitbit.cli.sync_repo", return_value=_ok()):
             result = runner.invoke(
                 main,
                 [
@@ -275,7 +275,7 @@ class TestSyncSingle:
 
     def test_failure_prints_error_and_exits_one(self):
         runner = CliRunner()
-        with patch("git_mirror.cli.sync_repo", return_value=_fail()):
+        with patch("gitbit.cli.sync_repo", return_value=_fail()):
             result = runner.invoke(
                 main,
                 [
@@ -304,7 +304,7 @@ class TestSyncSingle:
 
     def test_lfs_flag_propagated(self):
         runner = CliRunner()
-        with patch("git_mirror.cli.sync_repo", return_value=_ok()) as mock_sync:
+        with patch("gitbit.cli.sync_repo", return_value=_ok()) as mock_sync:
             runner.invoke(
                 main,
                 [
@@ -319,7 +319,7 @@ class TestSyncSingle:
 
     def test_custom_name_propagated(self):
         runner = CliRunner()
-        with patch("git_mirror.cli.sync_repo", return_value=_ok()) as mock_sync:
+        with patch("gitbit.cli.sync_repo", return_value=_ok()) as mock_sync:
             runner.invoke(
                 main,
                 [
@@ -334,7 +334,7 @@ class TestSyncSingle:
 
     def test_timeout_propagated(self):
         runner = CliRunner()
-        with patch("git_mirror.cli.sync_repo", return_value=_ok()) as mock_sync:
+        with patch("gitbit.cli.sync_repo", return_value=_ok()) as mock_sync:
             runner.invoke(
                 main,
                 [
@@ -349,7 +349,7 @@ class TestSyncSingle:
 
     def test_default_timeout_is_300(self):
         runner = CliRunner()
-        with patch("git_mirror.cli.sync_repo", return_value=_ok()) as mock_sync:
+        with patch("gitbit.cli.sync_repo", return_value=_ok()) as mock_sync:
             runner.invoke(
                 main,
                 [
@@ -363,7 +363,7 @@ class TestSyncSingle:
 
     def test_dry_run_propagated(self):
         runner = CliRunner()
-        with patch("git_mirror.cli.sync_repo", return_value=_ok()) as mock_sync:
+        with patch("gitbit.cli.sync_repo", return_value=_ok()) as mock_sync:
             runner.invoke(
                 main,
                 [

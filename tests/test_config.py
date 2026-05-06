@@ -1,4 +1,4 @@
-"""Tests for git_mirror.config."""
+"""Tests for gitbit.config."""
 from __future__ import annotations
 
 import json
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from git_mirror.config import Config, GlobalConfig, RepoConfig, load_config
-from git_mirror.exceptions import ConfigError
+from gitbit.config import Config, GlobalConfig, RepoConfig, load_config
+from gitbit.exceptions import ConfigError
 
 
 class TestLoadConfig:
@@ -80,7 +80,7 @@ class TestLoadConfig:
 
 class TestAuthConfigExpansion:
     def test_private_key_tilde_expanded(self) -> None:
-        from git_mirror.config import AuthConfig
+        from gitbit.config import AuthConfig
 
         auth = AuthConfig(type="ssh", private_key="~/some/key")
         assert not auth.private_key.startswith("~")
@@ -88,13 +88,13 @@ class TestAuthConfigExpansion:
 
     def test_private_key_env_var_expanded(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("KEYDIR", "/opt/keys")
-        from git_mirror.config import AuthConfig
+        from gitbit.config import AuthConfig
 
         auth = AuthConfig(type="ssh", private_key="$KEYDIR/id_rsa")
         assert auth.private_key == "/opt/keys/id_rsa"
 
     def test_private_key_none_stays_none(self) -> None:
-        from git_mirror.config import AuthConfig
+        from gitbit.config import AuthConfig
 
         auth = AuthConfig(type="ssh", private_key=None)
         assert auth.private_key is None
@@ -102,9 +102,9 @@ class TestAuthConfigExpansion:
 
 class TestGlobalConfigExpansion:
     def test_mirrors_dir_tilde_expanded(self) -> None:
-        gc = GlobalConfig(mirrors_dir="~/.git-mirror/mirrors")
+        gc = GlobalConfig(mirrors_dir="~/.gitbit/mirrors")
         assert not gc.mirrors_dir.startswith("~")
-        assert gc.mirrors_dir == os.path.expanduser("~/.git-mirror/mirrors")
+        assert gc.mirrors_dir == os.path.expanduser("~/.gitbit/mirrors")
 
     def test_mirrors_dir_env_var_expanded(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MIRRORBASE", "/data/mirrors")

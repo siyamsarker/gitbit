@@ -1,4 +1,4 @@
-"""Click-based CLI entry point for git-mirror."""
+"""Click-based CLI entry point for gitbit."""
 from __future__ import annotations
 
 import logging
@@ -25,9 +25,9 @@ def _setup_logging(verbose: bool) -> None:
 
 
 @click.group()
-@click.version_option(__version__, prog_name="git-mirror")
+@click.version_option(__version__, prog_name="gitbit")
 def main() -> None:
-    """git-mirror — mirror Git repositories with full ref fidelity."""
+    """gitbit — mirror Git repositories with full ref fidelity."""
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ def export_all(
 @click.option("--lfs", is_flag=True, default=False, help="Mirror LFS objects.")
 @click.option(
     "--mirrors-dir",
-    default="~/.git-mirror/mirrors",
+    default="~/.gitbit/mirrors",
     show_default=True,
     help="Base directory for local mirror storage.",
 )

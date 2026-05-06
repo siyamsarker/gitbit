@@ -1,4 +1,4 @@
-"""High-level sync orchestration for git-mirror."""
+"""High-level sync orchestration for gitbit."""
 from __future__ import annotations
 
 import logging

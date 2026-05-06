@@ -1,4 +1,4 @@
-"""Authentication helpers for git-mirror."""
+"""Authentication helpers for gitbit."""
 from __future__ import annotations
 
 import os

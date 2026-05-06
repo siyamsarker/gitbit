@@ -1,4 +1,4 @@
-"""Tests for git_mirror.git_ops."""
+"""Tests for gitbit.git_ops."""
 from __future__ import annotations
 
 import subprocess
@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from git_mirror.exceptions import DiskSpaceError, GitOperationError
-from git_mirror.git_ops import (
+from gitbit.exceptions import DiskSpaceError, GitOperationError
+from gitbit.git_ops import (
     MIN_FREE_GB,
     _run_command,
     check_disk_space,
@@ -73,7 +73,7 @@ class TestRunCommand:
 
         mock_run = mocker.patch("subprocess.run")
         mock_run.return_value = subprocess.CompletedProcess(["git", "push"], 0, "", "")
-        with caplog.at_level(logging.DEBUG, logger="git_mirror.git_ops"):
+        with caplog.at_level(logging.DEBUG, logger="gitbit.git_ops"):
             _run_command(
                 ["git", "push", "--mirror", "https://oauth2:secret@host/repo"],
                 redact_args={3},
@@ -263,13 +263,13 @@ class TestPushMirror:
 
 class TestLfsFetchAll:
     def test_skips_when_lfs_not_available(self, mocker, tmp_path: Path) -> None:
-        mocker.patch("git_mirror.git_ops.lfs_available", return_value=False)
+        mocker.patch("gitbit.git_ops.lfs_available", return_value=False)
         mock_run = mocker.patch("subprocess.run")
         lfs_fetch_all(str(tmp_path), env={}, timeout=120, dry_run=False)
         mock_run.assert_not_called()
 
     def test_calls_git_lfs_fetch_all_when_available(self, mocker, tmp_path: Path) -> None:
-        mocker.patch("git_mirror.git_ops.lfs_available", return_value=True)
+        mocker.patch("gitbit.git_ops.lfs_available", return_value=True)
         mock_run = mocker.patch("subprocess.run")
         mock_run.return_value = subprocess.CompletedProcess([], 0, "", "")
         lfs_fetch_all(str(tmp_path), env={}, timeout=120, dry_run=False)
@@ -281,7 +281,7 @@ class TestLfsFetchAll:
 
 class TestLfsPushAll:
     def test_skips_when_lfs_not_available(self, mocker, tmp_path: Path) -> None:
-        mocker.patch("git_mirror.git_ops.lfs_available", return_value=False)
+        mocker.patch("gitbit.git_ops.lfs_available", return_value=False)
         mock_run = mocker.patch("subprocess.run")
         lfs_push_all(
             str(tmp_path),
@@ -293,7 +293,7 @@ class TestLfsPushAll:
         mock_run.assert_not_called()
 
     def test_calls_git_lfs_push_all_when_available(self, mocker, tmp_path: Path) -> None:
-        mocker.patch("git_mirror.git_ops.lfs_available", return_value=True)
+        mocker.patch("gitbit.git_ops.lfs_available", return_value=True)
         mock_run = mocker.patch("subprocess.run")
         mock_run.return_value = subprocess.CompletedProcess([], 0, "", "")
         lfs_push_all(

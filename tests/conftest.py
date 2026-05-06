@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for git-mirror tests."""
+"""Shared pytest fixtures for gitbit tests."""
 from __future__ import annotations
 
 import json
@@ -58,7 +58,7 @@ def config_file(tmp_path: Path, sample_config_dict: dict) -> str:
 @pytest.fixture()
 def ssh_repo_config():
     """Return a RepoConfig-compatible dict for SSH auth."""
-    from git_mirror.config import AuthConfig, RepoConfig
+    from gitbit.config import AuthConfig, RepoConfig
 
     return RepoConfig(
         name="TestSSH",
@@ -72,7 +72,7 @@ def ssh_repo_config():
 @pytest.fixture()
 def https_repo_config():
     """Return a RepoConfig-compatible object for HTTPS auth."""
-    from git_mirror.config import AuthConfig, RepoConfig
+    from gitbit.config import AuthConfig, RepoConfig
 
     return RepoConfig(
         name="TestHTTPS",

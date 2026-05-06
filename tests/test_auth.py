@@ -1,13 +1,13 @@
-"""Tests for git_mirror.auth."""
+"""Tests for gitbit.auth."""
 from __future__ import annotations
 
 import os
 
 import pytest
 
-from git_mirror.auth import build_auth_env, inject_https_token, safe_url
-from git_mirror.config import AuthConfig
-from git_mirror.exceptions import AuthError
+from gitbit.auth import build_auth_env, inject_https_token, safe_url
+from gitbit.config import AuthConfig
+from gitbit.exceptions import AuthError
 
 
 class TestBuildAuthEnv:

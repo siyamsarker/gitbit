@@ -1,4 +1,4 @@
-"""Configuration models and loader for git-mirror."""
+"""Configuration models and loader for gitbit."""
 from __future__ import annotations
 
 import json
@@ -36,7 +36,7 @@ class GlobalConfig(BaseModel):
     parallel: int = Field(default=4, ge=1, le=32)
     timeout: int = Field(default=300, ge=10)
     verbose: bool = False
-    mirrors_dir: str = Field(default="~/.git-mirror/mirrors")
+    mirrors_dir: str = Field(default="~/.gitbit/mirrors")
 
     @field_validator("mirrors_dir")
     @classmethod
