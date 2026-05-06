@@ -58,3 +58,4 @@ mirrors/
 
 # Distribution
 MANIFEST
+.coverage*
