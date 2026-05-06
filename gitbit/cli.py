@@ -14,6 +14,9 @@ from .exceptions import GitMirrorError
 from .sync import export_repo, import_repo, print_summary, run_parallel, sync_repo
 
 
+CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"], max_content_width=100)
+
+
 def _setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
@@ -24,10 +27,19 @@ def _setup_logging(verbose: bool) -> None:
     )
 
 
-@click.group()
+@click.group(context_settings=CONTEXT_SETTINGS)
 @click.version_option(__version__, prog_name="gitbit")
 def main() -> None:
-    """gitbit — mirror Git repositories with full ref fidelity."""
+    """Gitbit — Mirror Git repositories with full ref fidelity.
+
+    \b
+    Clones every ref (branches, tags, notes) from a source and pushes them
+    to a destination using git clone --mirror and git push --mirror.
+    Supports SSH and HTTPS auth, Git LFS, parallel execution, and
+    automatic retries with exponential backoff.
+
+    Run 'python -m gitbit COMMAND -h' for detailed help on any command.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -35,31 +47,37 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 
 _config_option = click.option(
-    "-c", "--config", "config_path", required=True, help="Path to JSON config file."
+    "-c", "--config",
+    "config_path",
+    required=True,
+    metavar="FILE",
+    help="Path to the JSON configuration file.",
 )
 _dry_run_option = click.option(
     "--dry-run",
     is_flag=True,
     default=False,
-    help="Print actions without executing.",
+    help="Print each git command without executing it. No data is transferred.",
 )
 _parallel_option = click.option(
     "--parallel",
     default=None,
     type=int,
-    help="Number of parallel workers (overrides config).",
+    metavar="N",
+    help="Number of repositories to process concurrently. Overrides the config value.",
 )
 _timeout_option = click.option(
     "--timeout",
     default=None,
     type=int,
-    help="Per-repo timeout in seconds (overrides config).",
+    metavar="SECONDS",
+    help="Maximum time allowed per repository operation. Overrides the config value.",
 )
 _verbose_option = click.option(
     "--verbose",
     is_flag=True,
     default=False,
-    help="Enable debug logging.",
+    help="Enable DEBUG-level logging including every git command and retry attempt.",
 )
 
 
@@ -81,7 +99,17 @@ def sync_all(
     timeout: int | None,
     verbose: bool,
 ) -> None:
-    """Import and export all repositories defined in config."""
+    """Full sync: fetch all sources, then push to all destinations.
+
+    \b
+    For each repository defined in the config file:
+      1. Clone the source (or fetch updates if already cloned).
+      2. Optionally fetch all Git LFS objects.
+      3. Push all refs to the destination using --mirror.
+
+    Repositories are processed in parallel up to the --parallel limit.
+    Failed repositories are reported in the summary but do not stop others.
+    """
     _setup_logging(verbose)
     try:
         cfg = load_config(config_path)
@@ -121,7 +149,16 @@ def import_all(
     timeout: int | None,
     verbose: bool,
 ) -> None:
-    """Clone or fetch all source repos into local mirrors."""
+    """Fetch all source repositories into local mirrors.
+
+    \b
+    For each repository in the config file, either:
+      - Clones the source as a bare mirror (first run), or
+      - Fetches and prunes updates into the existing mirror.
+
+    Does NOT push to destinations. Use 'export-all' as a follow-up step,
+    or use 'sync-all' to do both in one command.
+    """
     _setup_logging(verbose)
     try:
         cfg = load_config(config_path)
@@ -161,7 +198,15 @@ def export_all(
     timeout: int | None,
     verbose: bool,
 ) -> None:
-    """Push all local mirrors to their destinations."""
+    """Push all local mirrors to their configured destinations.
+
+    \b
+    Pushes every ref from the local mirror to the destination using
+    git push --mirror. Does NOT fetch from sources first.
+
+    Requires local mirrors to exist — run 'import-all' beforehand,
+    or use 'sync-all' to fetch and push in a single step.
+    """
     _setup_logging(verbose)
     try:
         cfg = load_config(config_path)
@@ -189,20 +234,37 @@ def export_all(
 
 
 @main.command("sync")
-@click.option("--source", required=True, help="Source Git URL.")
-@click.option("--dest", required=True, help="Destination Git URL.")
+@click.option(
+    "--source",
+    required=True,
+    metavar="URL",
+    help="Source Git repository URL (SSH or HTTPS).",
+)
+@click.option(
+    "--dest",
+    required=True,
+    metavar="URL",
+    help="Destination Git repository URL (SSH or HTTPS).",
+)
 @click.option(
     "--name",
     default="adhoc",
     show_default=True,
-    help="Name for the local mirror directory.",
+    metavar="NAME",
+    help="Label used for the local mirror directory (<name>.git).",
 )
-@click.option("--lfs", is_flag=True, default=False, help="Mirror LFS objects.")
+@click.option(
+    "--lfs",
+    is_flag=True,
+    default=False,
+    help="Also mirror Git LFS objects (requires git-lfs).",
+)
 @click.option(
     "--mirrors-dir",
     default="~/.gitbit/mirrors",
     show_default=True,
-    help="Base directory for local mirror storage.",
+    metavar="PATH",
+    help="Directory where local mirror clones are stored.",
 )
 @_dry_run_option
 @_timeout_option
@@ -217,7 +279,13 @@ def sync_single(
     timeout: int | None,
     verbose: bool,
 ) -> None:
-    """Mirror a single repo ad-hoc (no config file needed)."""
+    """Mirror a single repository from source to destination.
+
+    \b
+    No config file required. Clones the source as a bare mirror (or fetches
+    updates if already cloned), then pushes all refs to the destination.
+    Credentials are picked up from SSH agent or environment variables.
+    """
     _setup_logging(verbose)
     mirrors_dir = os.path.expandvars(os.path.expanduser(mirrors_dir))
     secs = timeout or 300
