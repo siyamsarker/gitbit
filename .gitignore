@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+sdist/
+wheels/
+.installed.cfg
+lib/
+lib64/
+parts/
+var/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+*.log
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# git-mirror local mirror storage
+~/.git-mirror/
+mirrors/
+*.git/
+
+# Distribution
+MANIFEST

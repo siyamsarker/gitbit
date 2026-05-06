@@ -1,0 +1,26 @@
+{
+  "global": {
+    "parallel": 4,
+    "timeout": 300,
+    "verbose": false,
+    "mirrors_dir": "~/.git-mirror/mirrors"
+  },
+  "repos": [
+    {
+      "name": "ProjectA",
+      "source": "git@github.com:org/ProjectA.git",
+      "dest": "git@backup.example.com:mirrors/ProjectA.git",
+      "auth": {"type": "ssh", "private_key": "~/.ssh/id_rsa"},
+      "lfs": true,
+      "submodules": false
+    },
+    {
+      "name": "RepoB",
+      "source": "https://gitlab.com/team/RepoB.git",
+      "dest": "https://git.example.com/team/RepoB.git",
+      "auth": {"type": "https", "token_env": "GITLAB_TOKEN"},
+      "lfs": false,
+      "submodules": false
+    }
+  ]
+}
