@@ -1,8 +1,7 @@
 # Gitbit
 
-[![PyPI](https://img.shields.io/pypi/v/gitbit)](https://pypi.org/project/gitbit/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/pypi/pyversions/gitbit)](https://pypi.org/project/gitbit/)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 
 A production-ready CLI tool for mirroring Git repositories with **full ref fidelity** — all
 branches, tags, and notes are preserved. Supports SSH and HTTPS authentication, Git LFS, concurrent
@@ -26,21 +25,30 @@ syncing, and automatic retries.
 
 ## Installation
 
-### pip
+**Requirements:** Python ≥ 3.9, `git` in `$PATH`, and (optionally) `git-lfs`.
 
 ```bash
-pip install gitbit
-```
-
-Requires Python ≥ 3.9, `git` in `$PATH`, and (optionally) `git-lfs`.
-
-### From source
-
-```bash
+# 1. Clone the repository
 git clone https://github.com/your-org/gitbit.git
 cd gitbit
-pip install -e ".[dev]"
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Install the CLI
+pip install -e .
 ```
+
+The `gitbit` command is now available in your terminal.
+
+> **For contributors** — install dev tools too:
+> ```bash
+> pip install -r requirements-dev.txt
+> ```
 
 ---
 
@@ -199,7 +207,8 @@ cd gitbit
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
+pip install -e .
 ```
 
 **3. Install pre-commit hooks**
