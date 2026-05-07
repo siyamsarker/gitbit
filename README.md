@@ -18,6 +18,8 @@ Gitbit is a command-line tool for mirroring Git repositories with exact ref fide
 - [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Uninstallation](#uninstallation)
+- [Updating](#updating)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Commands](#commands)
@@ -26,8 +28,6 @@ Gitbit is a command-line tool for mirroring Git repositories with exact ref fide
 - [Exit Codes](#exit-codes)
 - [Contributing](#contributing)
 - [License](#license)
-
----
 
 ---
 
@@ -58,10 +58,34 @@ Gitbit is a command-line tool for mirroring Git repositories with exact ref fide
 
 ## Installation
 
-### Option A — Install via pip _(recommended)_
+### Option A — Install via pipx _(recommended)_
+
+[pipx](https://pipx.pypa.io/) installs CLI tools in isolated environments, keeping them separate from your system Python.
+
+**Step 1 — Install pipx**
+
+| Distro / OS | Command |
+|---|---|
+| Debian / Ubuntu | `sudo apt install pipx` |
+| Fedora / RHEL 8+ / CentOS Stream | `sudo dnf install pipx` |
+| Arch / Manjaro | `sudo pacman -S python-pipx` |
+| openSUSE Tumbleweed / Leap | `sudo zypper install python3-pipx` |
+| Alpine Linux | `sudo apk add pipx` |
+| macOS | `brew install pipx` |
+| Other (generic) | `python3 -m pip install --user pipx` |
+
+**Step 2 — Add pipx to your PATH**
 
 ```bash
-pip install git+https://github.com/siyamsarker/gitbit.git
+pipx ensurepath
+```
+
+Restart your shell (or run `source ~/.bashrc` / `source ~/.zshrc`) for the PATH change to take effect.
+
+**Step 3 — Install Gitbit**
+
+```bash
+pipx install git+https://github.com/siyamsarker/gitbit.git
 ```
 
 Verify the installation:
@@ -85,6 +109,66 @@ git clone https://github.com/siyamsarker/gitbit.git
 cd gitbit
 pip install -r requirements.txt
 python -m gitbit --help
+```
+
+---
+
+## Uninstallation
+
+### Installed via pipx
+
+```bash
+pipx uninstall gitbit
+```
+
+### Installed via pip (development / editable)
+
+```bash
+pip uninstall gitbit
+```
+
+### Run from source
+
+Delete the cloned directory:
+
+```bash
+rm -rf /path/to/gitbit
+```
+
+---
+
+## Updating
+
+### Installed via pipx _(recommended)_
+
+```bash
+pipx upgrade gitbit
+```
+
+Verify the new version:
+
+```bash
+gitbit --version
+```
+
+### Installed via pip (development / editable)
+
+Pull the latest code and reinstall in-place:
+
+```bash
+cd /path/to/gitbit
+git pull
+pip install -e ".[dev]"
+```
+
+The editable install means most code changes take effect immediately after `git pull`, but reinstalling ensures any new entry points or dependencies declared in `pyproject.toml` are picked up.
+
+### Run from source
+
+```bash
+cd /path/to/gitbit
+git pull
+pip install -r requirements.txt
 ```
 
 ---
@@ -115,14 +199,53 @@ gitbit sync-all --config repos.json --dry-run
 
 ## Configuration
 
-Gitbit reads repository definitions from a JSON file. Use the provided example as a starting point:
+Gitbit reads repository definitions from a JSON file. You pass the file path to every batch command with `-c FILE`.
+
+### Creating repos.json
+
+**Installed via pipx** — create the file from scratch in a directory of your choice (e.g. `~/.gitbit/`):
+
+```bash
+mkdir -p ~/.gitbit
+$EDITOR ~/.gitbit/repos.json
+```
+
+Paste the minimal template below and fill in your values:
+
+```json
+{
+  "global": {
+    "parallel":    4,
+    "timeout":     300,
+    "verbose":     false,
+    "mirrors_dir": "~/.gitbit/mirrors"
+  },
+  "repos": [
+    {
+      "name":   "my-repo",
+      "source": "git@github.com:your-org/your-repo.git",
+      "dest":   "git@backup.example.com:mirrors/your-repo.git"
+    }
+  ]
+}
+```
+
+Then pass the path explicitly to every command:
+
+```bash
+gitbit sync-all -c ~/.gitbit/repos.json
+gitbit validate  -c ~/.gitbit/repos.json
+gitbit status    -c ~/.gitbit/repos.json
+```
+
+**Installed from source** — copy the bundled example file:
 
 ```bash
 cp repos.example.json repos.json
 $EDITOR repos.json
 ```
 
-> **Note:** `repos.json` may contain sensitive paths and environment variable names. It is listed in `.gitignore` by default and should never be committed to version control.
+> **Security note:** `repos.json` may contain SSH key paths and environment variable names for tokens. Keep it out of version control — if you cloned the repo, it is already listed in `.gitignore`.
 
 ### Full configuration reference
 

@@ -83,7 +83,7 @@ def main() -> None:
     Supports SSH and HTTPS auth, Git LFS, parallel execution, and
     automatic retries with exponential backoff.
 
-    Run 'python -m gitbit COMMAND -h' for detailed help on any command.
+    Run 'gitbit COMMAND -h' for detailed help on any command.
     """
 
 
