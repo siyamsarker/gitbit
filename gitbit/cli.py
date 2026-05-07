@@ -49,6 +49,7 @@ import click
 from . import __version__
 from .config import RepoConfig, load_config, validate_config
 from .exceptions import GitMirrorError
+from .state import STATE_FILE, get_failed_repos, load_state, record_results, save_state
 from .sync import export_repo, get_repo_status, import_repo, print_summary, run_parallel, sync_repo
 
 
@@ -198,6 +199,150 @@ _verbose_option = click.option(
     default=False,
     help="Enable DEBUG-level logging including every git command and retry attempt.",
 )
+_only_option = click.option(
+    "--only",
+    "only",
+    multiple=True,
+    metavar="NAME",
+    help=(
+        "Process ONLY the named repo(s). May be repeated. "
+        "Mutually exclusive with --exclude and --retry-failed."
+    ),
+)
+_exclude_option = click.option(
+    "--exclude",
+    "exclude",
+    multiple=True,
+    metavar="NAME",
+    help=(
+        "Skip the named repo(s). May be repeated. "
+        "Mutually exclusive with --only and --retry-failed."
+    ),
+)
+_fail_fast_option = click.option(
+    "--fail-fast",
+    "fail_fast",
+    is_flag=True,
+    default=False,
+    help="Stop processing after the first repository failure.",
+)
+_retry_failed_option = click.option(
+    "--retry-failed",
+    "retry_failed",
+    is_flag=True,
+    default=False,
+    help=(
+        "Re-run only repos that failed in the previous run (from state file). "
+        "Mutually exclusive with --only and --exclude."
+    ),
+)
+
+
+def _format_sync_age(iso_str: str | None) -> str:
+    """Convert an ISO-8601 timestamp from the state file to a relative age string.
+
+    Parses the stored ``last_sync_at`` value and delegates to ``_format_age()``
+    for the human-readable representation. Returns ``"never"`` when no timestamp
+    has been recorded yet.
+
+    Args:
+        iso_str: An ISO-8601 datetime string like ``"2026-05-08T10:30:12"``,
+                 or None if the repo has never been synced.
+
+    Returns:
+        A short relative age string (e.g. ``"2h ago"``) or ``"never"``.
+    """
+    if not iso_str:
+        return "never"
+    try:
+        dt = datetime.strptime(iso_str, "%Y-%m-%dT%H:%M:%S")
+        return _format_age(dt.timestamp())
+    except ValueError:
+        return "?"
+
+
+def _select_repos(
+    repos: list[RepoConfig],
+    only: tuple[str, ...],
+    exclude: tuple[str, ...],
+    retry_failed: bool,
+    state: dict,
+) -> list[RepoConfig] | None:
+    """Filter the repo list according to --only, --exclude, and --retry-failed.
+
+    Validates mutual exclusivity of the flags and that named repos exist in the
+    config. Emits warnings for --exclude names that are not in the config (they
+    may be typos but are non-fatal). Emits errors and returns None for --only
+    names that are not in the config (those are always mistakes).
+
+    Args:
+        repos:        Full list of RepoConfig objects from the loaded config.
+        only:         Tuple of repo names from --only (may be empty).
+        exclude:      Tuple of repo names from --exclude (may be empty).
+        retry_failed: Whether --retry-failed was set.
+        state:        State dict from load_state().
+
+    Returns:
+        The filtered list of RepoConfig objects, or None if a validation error
+        was detected (the caller should then exit with code 1).
+    """
+    # --- Mutual exclusivity checks ---
+    flags_set = [bool(only), bool(exclude), retry_failed]
+    active = sum(flags_set)
+    if active > 1:
+        combos = []
+        if only:
+            combos.append("--only")
+        if exclude:
+            combos.append("--exclude")
+        if retry_failed:
+            combos.append("--retry-failed")
+        click.echo(
+            f"Error: {' and '.join(combos)} are mutually exclusive. "
+            "Use at most one.",
+            err=True,
+        )
+        return None
+
+    name_to_repo = {r.name: r for r in repos}
+
+    # --- --only: keep only the explicitly named repos ---
+    if only:
+        missing = [n for n in only if n not in name_to_repo]
+        if missing:
+            for m in missing:
+                click.echo(f"Error: --only '{m}' is not defined in the config.", err=True)
+            return None
+        return [name_to_repo[n] for n in only if n in name_to_repo]
+
+    # --- --exclude: remove the named repos ---
+    if exclude:
+        unknown = [n for n in exclude if n not in name_to_repo]
+        for u in unknown:
+            click.echo(f"Warning: --exclude '{u}' is not in config — skipping.", err=True)
+        return [r for r in repos if r.name not in set(exclude)]
+
+    # --- --retry-failed: keep only repos that failed last time ---
+    if retry_failed:
+        failed_names = get_failed_repos(state)
+        if not failed_names:
+            click.echo("No failed repos recorded in state. Nothing to retry.")
+            return []  # Empty list — caller should exit 0
+        # Warn about names in state that are no longer in config.
+        for name in failed_names:
+            if name not in name_to_repo:
+                click.echo(
+                    f"Warning: failed repo '{name}' is no longer in config — skipping.",
+                    err=True,
+                )
+        selected = [name_to_repo[n] for n in failed_names if n in name_to_repo]
+        if not selected:
+            click.echo("No matching repos left after filtering. Nothing to retry.")
+            return []
+        return selected
+
+    # --- No filter flags: process all repos ---
+    return repos
 
 
 # ---------------------------------------------------------------------------
@@ -211,12 +356,20 @@ _verbose_option = click.option(
 @_parallel_option
 @_timeout_option
 @_verbose_option
+@_only_option
+@_exclude_option
+@_fail_fast_option
+@_retry_failed_option
 def sync_all(
     config_path: str,
     dry_run: bool,
     parallel: int | None,
     timeout: int | None,
     verbose: bool,
+    only: tuple[str, ...],
+    exclude: tuple[str, ...],
+    fail_fast: bool,
+    retry_failed: bool,
 ) -> None:
     """Full sync: fetch all sources, then push to all destinations.
 
@@ -227,7 +380,8 @@ def sync_all(
       3. Push all refs to the destination using --mirror.
 
     Repositories are processed in parallel up to the --parallel limit.
-    Failed repositories are reported in the summary but do not stop others.
+    Failed repositories are reported in the summary but do not stop others
+    unless --fail-fast is set.
     """
     _setup_logging(verbose, "sync-all")
     try:
@@ -236,19 +390,29 @@ def sync_all(
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
+    state = load_state()
+    selected = _select_repos(cfg.repos, only, exclude, retry_failed, state)
+    if selected is None:
+        sys.exit(1)
+    if not selected:
+        sys.exit(0)
+
     # CLI flags override config values when provided; fall back to config defaults.
     workers = parallel or cfg.global_config.parallel
     secs = timeout or cfg.global_config.timeout
 
     results = run_parallel(
         sync_repo,
-        cfg.repos,
+        selected,
         cfg.global_config.mirrors_dir,
         workers=workers,
         timeout=secs,
         dry_run=dry_run,
+        fail_fast=fail_fast,
     )
     print_summary(results)
+    record_results(state, results, "sync-all")
+    save_state(state)
 
     # Exit 1 if any repo failed so the caller (cron, CI, etc.) can detect errors.
     if any(not r.success for r in results):
@@ -266,12 +430,20 @@ def sync_all(
 @_parallel_option
 @_timeout_option
 @_verbose_option
+@_only_option
+@_exclude_option
+@_fail_fast_option
+@_retry_failed_option
 def import_all(
     config_path: str,
     dry_run: bool,
     parallel: int | None,
     timeout: int | None,
     verbose: bool,
+    only: tuple[str, ...],
+    exclude: tuple[str, ...],
+    fail_fast: bool,
+    retry_failed: bool,
 ) -> None:
     """Fetch all source repositories into local mirrors.
 
@@ -290,18 +462,28 @@ def import_all(
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
+    state = load_state()
+    selected = _select_repos(cfg.repos, only, exclude, retry_failed, state)
+    if selected is None:
+        sys.exit(1)
+    if not selected:
+        sys.exit(0)
+
     workers = parallel or cfg.global_config.parallel
     secs = timeout or cfg.global_config.timeout
 
     results = run_parallel(
         import_repo,
-        cfg.repos,
+        selected,
         cfg.global_config.mirrors_dir,
         workers=workers,
         timeout=secs,
         dry_run=dry_run,
+        fail_fast=fail_fast,
     )
     print_summary(results)
+    record_results(state, results, "import-all")
+    save_state(state)
 
     if any(not r.success for r in results):
         sys.exit(1)
@@ -318,12 +500,20 @@ def import_all(
 @_parallel_option
 @_timeout_option
 @_verbose_option
+@_only_option
+@_exclude_option
+@_fail_fast_option
+@_retry_failed_option
 def export_all(
     config_path: str,
     dry_run: bool,
     parallel: int | None,
     timeout: int | None,
     verbose: bool,
+    only: tuple[str, ...],
+    exclude: tuple[str, ...],
+    fail_fast: bool,
+    retry_failed: bool,
 ) -> None:
     """Push all local mirrors to their configured destinations.
 
@@ -341,18 +531,28 @@ def export_all(
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
+    state = load_state()
+    selected = _select_repos(cfg.repos, only, exclude, retry_failed, state)
+    if selected is None:
+        sys.exit(1)
+    if not selected:
+        sys.exit(0)
+
     workers = parallel or cfg.global_config.parallel
     secs = timeout or cfg.global_config.timeout
 
     results = run_parallel(
         export_repo,
-        cfg.repos,
+        selected,
         cfg.global_config.mirrors_dir,
         workers=workers,
         timeout=secs,
         dry_run=dry_run,
+        fail_fast=fail_fast,
     )
     print_summary(results)
+    record_results(state, results, "export-all")
+    save_state(state)
 
     if any(not r.success for r in results):
         sys.exit(1)
@@ -532,6 +732,8 @@ def status_cmd(config_path: str, verbose: bool) -> None:
       - Whether the local mirror directory exists
       - Total mirror size on disk
       - Time since the mirror was last modified
+      - Time since the last successful or failed sync (from state file)
+      - Last sync status: success, failed, or — (never synced)
 
     No network connections are made.
     """
@@ -541,6 +743,10 @@ def status_cmd(config_path: str, verbose: bool) -> None:
     except GitMirrorError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
+    # Load persistent sync state to populate LAST SYNC / STATUS columns.
+    state = load_state()
+    repo_state = state.get("repos", {})
 
     # Collect status for every repo by walking their local mirror directories.
     statuses = [get_repo_status(r, cfg.global_config.mirrors_dir) for r in cfg.repos]
@@ -558,17 +764,30 @@ def status_cmd(config_path: str, verbose: bool) -> None:
     # table stays aligned regardless of name length.
     name_w = max(len(s.name) for s in statuses) + 2
 
-    click.echo(f"  {'NAME':<{name_w}}  {'MIRROR':<9}  {'SIZE':<11}  LAST MODIFIED")
-    click.echo(f"  {'-' * name_w}  {'-' * 7}  {'-' * 9}  {'-' * 20}")
+    click.echo(
+        f"  {'NAME':<{name_w}}  {'MIRROR':<9}  {'SIZE':<11}  {'LAST MODIFIED':<22}  {'LAST SYNC':<12}  STATUS"
+    )
+    click.echo(
+        f"  {'-' * name_w}  {'-' * 7}  {'-' * 9}  {'-' * 20}  {'-' * 10}  {'-' * 7}"
+    )
 
     for s in statuses:
+        # Pull sync metadata from the state file (may be absent for unseen repos).
+        entry = repo_state.get(s.name, {})
+        last_sync = _format_sync_age(entry.get("last_sync_at"))
+        sync_status = entry.get("last_sync_status", "—") if entry else "—"
+
         if s.present:
             size = f"{s.size_mb:.1f} MB"
             # last_modified is None only for empty directories; normally it is set.
             modified = _format_age(s.last_modified) if s.last_modified else "—"
-            click.echo(f"  {s.name:<{name_w}}  {'present':<9}  {size:<11}  {modified}")
+            click.echo(
+                f"  {s.name:<{name_w}}  {'present':<9}  {size:<11}  {modified:<22}  {last_sync:<12}  {sync_status}"
+            )
         else:
-            click.echo(f"  {s.name:<{name_w}}  {'missing':<9}  {'—':<11}  —")
+            click.echo(
+                f"  {s.name:<{name_w}}  {'missing':<9}  {'—':<11}  {'—':<22}  {last_sync:<12}  {sync_status}"
+            )
 
     click.echo()
     pending = len(statuses) - present

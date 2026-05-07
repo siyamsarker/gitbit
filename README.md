@@ -23,6 +23,7 @@ Gitbit is a command-line tool for mirroring Git repositories with exact ref fide
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Commands](#commands)
+- [Sync State](#sync-state)
 - [Log File](#log-file)
 - [Authentication](#authentication)
 - [Security](#security)
@@ -310,6 +311,13 @@ gitbit sync-all -c repos.json [OPTIONS]
 
 Runs the complete mirroring pipeline for every repository defined in the config: clone or fetch from source, optionally fetch LFS objects, then push all refs to the destination.
 
+| Option | Description |
+|---|---|
+| `--only NAME` | Process only this repo. Repeatable. Mutually exclusive with `--exclude`/`--retry-failed`. |
+| `--exclude NAME` | Skip this repo. Repeatable. Mutually exclusive with `--only`/`--retry-failed`. |
+| `--fail-fast` | Stop after the first failure; mark remaining repos as skipped. |
+| `--retry-failed` | Re-run only repos that failed in the previous run. Mutually exclusive with `--only`/`--exclude`. |
+
 ### `import-all` — fetch sources only
 
 ```bash
@@ -318,6 +326,13 @@ gitbit import-all -c repos.json [OPTIONS]
 
 Clones or fetches each source repository into the local mirror directory. Does **not** push to destinations. Use this to stage updates before a separate `export-all` step, or when you need to inspect mirrors before distributing them.
 
+| Option | Description |
+|---|---|
+| `--only NAME` | Process only this repo. Repeatable. Mutually exclusive with `--exclude`/`--retry-failed`. |
+| `--exclude NAME` | Skip this repo. Repeatable. Mutually exclusive with `--only`/`--retry-failed`. |
+| `--fail-fast` | Stop after the first failure; mark remaining repos as skipped. |
+| `--retry-failed` | Re-run only repos that failed in the previous run. Mutually exclusive with `--only`/`--exclude`. |
+
 ### `export-all` — push to destinations only
 
 ```bash
@@ -325,6 +340,13 @@ gitbit export-all -c repos.json [OPTIONS]
 ```
 
 Pushes each local mirror to its configured destination. Local mirrors must already exist — run `import-all` first, or use `sync-all` to perform both steps in one command.
+
+| Option | Description |
+|---|---|
+| `--only NAME` | Process only this repo. Repeatable. Mutually exclusive with `--exclude`/`--retry-failed`. |
+| `--exclude NAME` | Skip this repo. Repeatable. Mutually exclusive with `--only`/`--retry-failed`. |
+| `--fail-fast` | Stop after the first failure; mark remaining repos as skipped. |
+| `--retry-failed` | Re-run only repos that failed in the previous run. Mutually exclusive with `--only`/`--exclude`. |
 
 ### `validate` — check configuration without network access
 
@@ -363,13 +385,15 @@ Displays each repository's local mirror directory, total size on disk, and time 
 Mirror status  —  repos.json
 Mirrors directory: /home/user/.gitbit/mirrors
 
-  NAME        MIRROR     SIZE         LAST MODIFIED
-  ----------  -------    ---------    --------------------
-  ProjectA    present    142.3 MB     2h ago
-  RepoB       missing    —            —
+  NAME        MIRROR     SIZE         LAST MODIFIED           LAST SYNC    STATUS
+  ----------  -------    ---------    --------------------    ----------   -------
+  ProjectA    present    142.3 MB     2h ago                  2h ago       success
+  RepoB       missing    —            —                       never        —
 
   2 repo(s)  —  1 mirrored, 1 pending
 ```
+
+The **LAST SYNC** column shows the relative age of the last recorded sync attempt (from the state file), and **STATUS** shows whether it ended in `success`, `failed`, or `—` (never run).
 
 ### `sync` — ad-hoc single repository
 
@@ -399,6 +423,55 @@ Mirrors a single repository without requiring a config file. Credentials are pic
 | `--parallel N` | Override the `parallel` value from config |
 | `--timeout SECONDS` | Override the `timeout` value from config |
 | `--verbose` | Enable DEBUG-level logging |
+| `--only NAME` | Process only the named repo(s); repeatable |
+| `--exclude NAME` | Skip the named repo(s); repeatable |
+| `--fail-fast` | Stop after the first failure |
+| `--retry-failed` | Re-run only repos that failed last time |
+
+---
+
+## Sync State
+
+Gitbit writes the outcome of every `sync-all`, `import-all`, and `export-all` run to a JSON state file at:
+
+```
+~/.gitbit/state.json
+```
+
+The state file records, for each repository, the timestamp of the last operation, whether it succeeded or failed, the error message (if any), and which command ran it. This information drives the `--retry-failed` flag and populates the **LAST SYNC** and **STATUS** columns in `gitbit status`.
+
+### State file format
+
+```json
+{
+  "repos": {
+    "ProjectA": {
+      "last_sync_at": "2026-05-08T10:30:12",
+      "last_sync_status": "success",
+      "last_error": null,
+      "last_command": "sync-all"
+    },
+    "RepoB": {
+      "last_sync_at": "2026-05-08T10:31:05",
+      "last_sync_status": "failed",
+      "last_error": "Connection timed out after 300s",
+      "last_command": "sync-all"
+    }
+  }
+}
+```
+
+### Retrying failed repositories
+
+After a partial failure, re-run only the repos that failed without touching the ones that succeeded:
+
+```bash
+gitbit sync-all -c repos.json --retry-failed
+```
+
+If no failures are recorded in the state file, the command prints a message and exits 0. If a previously failed repo is no longer defined in the config, it is warned about and skipped.
+
+`--retry-failed` is mutually exclusive with `--only` and `--exclude`.
 
 ---
 

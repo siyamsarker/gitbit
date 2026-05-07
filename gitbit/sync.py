@@ -372,6 +372,7 @@ def run_parallel(
     workers: int,
     timeout: int,
     dry_run: bool,
+    fail_fast: bool = False,
 ) -> list[RepoResult]:
     """Execute a sync operation on multiple repositories concurrently.
 
@@ -381,8 +382,13 @@ def run_parallel(
 
     Results arrive in completion order (not submission order) because
     as_completed() is used — faster repos appear in the results list first.
-    All repos are processed regardless of individual failures; one repo's
-    failure does not cancel or skip others.
+    By default all repos are processed regardless of individual failures;
+    one repo's failure does not cancel or skip others.
+
+    When fail_fast=True, processing stops after the first failure. Futures
+    that have not yet started are cancelled and appear in the result list
+    with a "skipped — fail-fast triggered" message. Already-running futures
+    are allowed to complete naturally (they cannot be interrupted mid-git).
 
     Unexpected exceptions from futures (bugs in operation code, not git
     failures — those are captured inside import/export_repo) are caught and
@@ -400,12 +406,16 @@ def run_parallel(
                      GlobalConfig.parallel or the --parallel CLI flag.
         timeout:     Maximum seconds per git operation, forwarded to operation.
         dry_run:     Forwarded verbatim to operation.
+        fail_fast:   When True, stop processing after the first failure and
+                     mark all pending (not yet started) futures as skipped.
 
     Returns:
         List of RepoResult, one per repo, in completion order (not input order).
         The list has the same length as repos.
     """
     results: list[RepoResult] = []
+    failed_repo: str | None = None  # name of the first repo that triggered fail-fast
+
     with ThreadPoolExecutor(max_workers=workers) as pool:
         # Submit all repos immediately and keep a future→repo mapping so we can
         # attribute results (and exceptions) to the correct repo name even after
@@ -417,14 +427,39 @@ def run_parallel(
         for future in as_completed(futures):
             repo = futures[future]
             try:
-                results.append(future.result())
+                result = future.result()
             except Exception as e:
                 # This branch handles unexpected programming errors that escaped
                 # the operation's own try/except. GitMirrorError subclasses are
                 # captured inside import_repo/export_repo and returned as
                 # RepoResult(success=False), so they do not reach here normally.
                 logger.error("[%s] Unexpected error: %s", repo.name, e)
-                results.append(RepoResult(name=repo.name, success=False, message=str(e)))
+                result = RepoResult(name=repo.name, success=False, message=str(e))
+
+            results.append(result)
+
+            if fail_fast and not result.success and failed_repo is None:
+                # First failure while fail-fast is active: cancel all pending
+                # futures (those not yet picked up by a worker thread) and add
+                # a "skipped" result for each one. Futures already running
+                # cannot be cancelled — they will complete but we break before
+                # processing their as_completed() iteration.
+                failed_repo = result.name
+                logger.warning(
+                    "Fail-fast triggered by [%s] — cancelling remaining repos.",
+                    failed_repo,
+                )
+                for pending_future, pending_repo in futures.items():
+                    if pending_future.cancel():
+                        # cancel() returns True only when the future had not
+                        # yet started — exactly the ones we want to skip.
+                        results.append(RepoResult(
+                            name=pending_repo.name,
+                            success=False,
+                            message=f"skipped — fail-fast triggered by [{failed_repo}]",
+                        ))
+                break
+
     return results
 
 
