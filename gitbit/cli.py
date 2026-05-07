@@ -13,6 +13,7 @@ Command overview
   sync        Ad-hoc single-repo mirror without a config file.
   validate    Check the config file offline — no network, no git calls.
   status      Show local mirror state (size, last-modified) — no network.
+  logs        View and filter the persistent activity log.
 
 Architecture notes
 ------------------
@@ -36,8 +37,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import time
+from datetime import datetime, timedelta
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import click
 
@@ -51,25 +56,85 @@ from .sync import export_repo, get_repo_status, import_repo, print_summary, run_
 # help text to avoid word-wrapping option descriptions too aggressively.
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"], max_content_width=100)
 
+# ---------------------------------------------------------------------------
+# Persistent file logging
+# ---------------------------------------------------------------------------
 
-def _setup_logging(verbose: bool) -> None:
-    """Configure the root logger for the current command invocation.
+_LOG_DIR = Path.home() / ".gitbit" / "logs"
+_LOG_FILE = _LOG_DIR / "gitbit.log"
+_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file before rotation
+_LOG_BACKUP_COUNT = 5              # keep 5 rotated files → up to 30 MB total
 
-    Sets up a single StreamHandler to stderr with a timestamp + level prefix.
-    DEBUG level is enabled when verbose=True (--verbose flag); INFO otherwise.
-    Called at the start of every command before any library code runs.
+# Parses a structured line written by the file log handler:
+#   2026-05-08T10:30:00 INFO     sync-all     [Test Project] Cloning mirror...
+_LOG_LINE_RE = re.compile(
+    r'^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})'
+    r'\s+(?P<level>[A-Z]+)'
+    r'\s+(?P<command>\S+)'
+    r'\s+(?P<message>.*)$'
+)
+
+_LEVEL_VALUES: dict[str, int] = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+}
+
+
+class _CommandFilter(logging.Filter):
+    """Inject the active command name into every log record for the file handler."""
+
+    def __init__(self, command: str) -> None:
+        super().__init__()
+        self._command = command
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.command = self._command  # type: ignore[attr-defined]
+        return True
+
+
+def _setup_logging(verbose: bool, command: str = "gitbit") -> None:
+    """Configure root logger for the current command invocation.
+
+    Sets up two handlers:
+      - StreamHandler (stderr) for interactive terminal output.
+      - RotatingFileHandler (~/.gitbit/logs/gitbit.log) for persistent audit log.
+
+    The file handler includes the command name in every entry so logs from
+    different commands can be filtered by source. Console output is unchanged.
 
     Args:
-        verbose: When True, sets the log level to DEBUG to show every git
-                 command, retry attempt, and internal state transition.
+        verbose: When True, sets log level to DEBUG.
+        command: Active CLI command name injected into every file log entry.
     """
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)-8s %(message)s",
+
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setFormatter(logging.Formatter(
+        fmt="%(asctime)s %(levelname)-8s %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
-        level=level,
-        stream=sys.stderr,
+    ))
+
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    file_handler = RotatingFileHandler(
+        _LOG_FILE,
+        maxBytes=_LOG_MAX_BYTES,
+        backupCount=_LOG_BACKUP_COUNT,
+        encoding="utf-8",
     )
+    file_handler.setFormatter(logging.Formatter(
+        fmt="%(asctime)s %(levelname)-8s %(command)-12s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    ))
+
+    root = logging.getLogger()
+    root.setLevel(level)
+    root.handlers.clear()
+    root.filters.clear()
+    root.addFilter(_CommandFilter(command))
+    root.addHandler(console_handler)
+    root.addHandler(file_handler)
 
 
 @click.group(context_settings=CONTEXT_SETTINGS)
@@ -164,7 +229,7 @@ def sync_all(
     Repositories are processed in parallel up to the --parallel limit.
     Failed repositories are reported in the summary but do not stop others.
     """
-    _setup_logging(verbose)
+    _setup_logging(verbose, "sync-all")
     try:
         cfg = load_config(config_path)
     except GitMirrorError as e:
@@ -218,7 +283,7 @@ def import_all(
     Does NOT push to destinations. Use 'export-all' as a follow-up step,
     or use 'sync-all' to do both in one command.
     """
-    _setup_logging(verbose)
+    _setup_logging(verbose, "import-all")
     try:
         cfg = load_config(config_path)
     except GitMirrorError as e:
@@ -269,7 +334,7 @@ def export_all(
     Requires local mirrors to exist — run 'import-all' beforehand,
     or use 'sync-all' to fetch and push in a single step.
     """
-    _setup_logging(verbose)
+    _setup_logging(verbose, "export-all")
     try:
         cfg = load_config(config_path)
     except GitMirrorError as e:
@@ -351,7 +416,7 @@ def sync_single(
     updates if already cloned), then pushes all refs to the destination.
     Credentials are picked up from SSH agent or environment variables.
     """
-    _setup_logging(verbose)
+    _setup_logging(verbose, "sync")
 
     # Expand ~ and $VAR in the mirrors-dir path since Click does not do this
     # automatically (unlike GlobalConfig's Pydantic validator).
@@ -391,7 +456,7 @@ def validate_cmd(config_path: str, verbose: bool) -> None:
 
     Exits 0 if no errors are found (warnings do not affect the exit code).
     """
-    _setup_logging(verbose)
+    _setup_logging(verbose, "validate")
     try:
         cfg = load_config(config_path)
     except GitMirrorError as e:
@@ -470,7 +535,7 @@ def status_cmd(config_path: str, verbose: bool) -> None:
 
     No network connections are made.
     """
-    _setup_logging(verbose)
+    _setup_logging(verbose, "status")
     try:
         cfg = load_config(config_path)
     except GitMirrorError as e:
@@ -508,3 +573,218 @@ def status_cmd(config_path: str, verbose: bool) -> None:
     click.echo()
     pending = len(statuses) - present
     click.echo(f"  {len(statuses)} repo(s)  —  {present} mirrored, {pending} pending")
+
+
+# ---------------------------------------------------------------------------
+# Log viewer helpers
+# ---------------------------------------------------------------------------
+
+
+def _log_files() -> list[Path]:
+    """Return all gitbit log files ordered from oldest to newest."""
+    files: list[Path] = []
+    for i in range(_LOG_BACKUP_COUNT, 0, -1):
+        p = _LOG_FILE.parent / f"{_LOG_FILE.name}.{i}"
+        if p.exists():
+            files.append(p)
+    if _LOG_FILE.exists():
+        files.append(_LOG_FILE)
+    return files
+
+
+def _parse_since(value: str) -> datetime:
+    """Parse a --since expression into an absolute datetime cutoff.
+
+    Accepts relative durations (30m, 2h, 7d) and absolute timestamps
+    (2026-05-08, 2026-05-08T10:30:00).
+    """
+    m = re.fullmatch(r'(\d+)([hmd])', value.strip())
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        delta = {'h': timedelta(hours=n), 'm': timedelta(minutes=n), 'd': timedelta(days=n)}[unit]
+        return datetime.now() - delta
+    for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(value.strip(), fmt)
+        except ValueError:
+            continue
+    raise ValueError(
+        f"Cannot parse '{value}'. "
+        "Use: 30m, 2h, 7d, 2026-05-08, or 2026-05-08T10:30:00"
+    )
+
+
+def _read_log_lines(since_dt: datetime | None) -> list[str]:
+    """Read log lines from all log files, optionally skipping entries before since_dt."""
+    lines: list[str] = []
+    for log_file in _log_files():
+        try:
+            with log_file.open(encoding="utf-8", errors="replace") as fh:
+                for raw in fh:
+                    line = raw.rstrip("\n")
+                    if not line:
+                        continue
+                    if since_dt is not None:
+                        match = _LOG_LINE_RE.match(line)
+                        if match:
+                            try:
+                                ts = datetime.strptime(match.group("ts"), "%Y-%m-%dT%H:%M:%S")
+                                if ts < since_dt:
+                                    continue
+                            except ValueError:
+                                pass
+                    lines.append(line)
+        except OSError:
+            pass
+    return lines
+
+
+def _matches_filters(
+    line: str,
+    min_level_int: int,
+    cmd_filter: str | None,
+    repo_filter: str | None,
+) -> bool:
+    """Return True if the log line passes all active filters."""
+    match = _LOG_LINE_RE.match(line)
+    if not match:
+        return False
+    if _LEVEL_VALUES.get(match.group("level").upper(), 0) < min_level_int:
+        return False
+    if cmd_filter and match.group("command").lower() != cmd_filter.lower():
+        return False
+    if repo_filter and f"[{repo_filter}]" not in match.group("message"):
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# logs
+# ---------------------------------------------------------------------------
+
+
+@main.command("logs")
+@click.option(
+    "-n", "--tail",
+    default=100,
+    type=int,
+    metavar="N",
+    show_default=True,
+    help="Show the last N entries. Use 0 to show all entries.",
+)
+@click.option(
+    "--level",
+    "min_level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    default=None,
+    help="Show only entries at or above this log level.",
+)
+@click.option(
+    "--command",
+    "cmd_filter",
+    type=click.Choice(
+        ["sync-all", "import-all", "export-all", "sync", "validate", "status"],
+        case_sensitive=False,
+    ),
+    default=None,
+    help="Show only entries produced by this command.",
+)
+@click.option(
+    "--repo",
+    "repo_filter",
+    default=None,
+    metavar="NAME",
+    help="Show only entries that mention this repository name.",
+)
+@click.option(
+    "--since",
+    "since_str",
+    default=None,
+    metavar="EXPR",
+    help=(
+        "Show entries from this point forward. "
+        "Accepts: 30m, 2h, 7d, 2026-05-08, 2026-05-08T10:30:00"
+    ),
+)
+@click.option(
+    "-f", "--follow",
+    is_flag=True,
+    default=False,
+    help="Stream new log entries as they are written (Ctrl-C to stop).",
+)
+def logs_cmd(
+    tail: int,
+    min_level: str | None,
+    cmd_filter: str | None,
+    repo_filter: str | None,
+    since_str: str | None,
+    follow: bool,
+) -> None:
+    """View and filter the persistent gitbit activity log.
+
+    \b
+    Reads ~/.gitbit/logs/gitbit.log and all rotated backups.
+    Every sync, validate, and status run is recorded there automatically.
+
+    \b
+    Examples:
+      gitbit logs                                    Last 100 entries
+      gitbit logs -n 50                              Last 50 entries
+      gitbit logs --level ERROR                      Errors only
+      gitbit logs --level WARNING                    Warnings and errors
+      gitbit logs --command sync-all                 sync-all activity only
+      gitbit logs --repo "Test Project"              One repo's activity
+      gitbit logs --since 1h                         Last hour
+      gitbit logs --since 2026-05-08                 From a specific date
+      gitbit logs --command sync-all --level ERROR   Errors from sync-all
+      gitbit logs -f                                 Follow live (Ctrl-C to stop)
+    """
+    if not _log_files():
+        click.echo("No log file found. Run a gitbit command first to generate logs.")
+        return
+
+    since_dt: datetime | None = None
+    if since_str:
+        try:
+            since_dt = _parse_since(since_str)
+        except ValueError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+
+    min_level_int = _LEVEL_VALUES.get((min_level or "").upper(), 0)
+
+    def passes(line: str) -> bool:
+        return _matches_filters(line, min_level_int, cmd_filter, repo_filter)
+
+    if follow:
+        for line in _read_log_lines(since_dt):
+            if passes(line):
+                click.echo(line)
+        # Tail the live log file for new entries.
+        try:
+            with _LOG_FILE.open(encoding="utf-8", errors="replace") as fh:
+                fh.seek(0, 2)  # jump to end of file
+                while True:
+                    raw = fh.readline()
+                    if raw:
+                        line = raw.rstrip("\n")
+                        if passes(line):
+                            click.echo(line)
+                            sys.stdout.flush()
+                    else:
+                        time.sleep(0.3)
+        except KeyboardInterrupt:
+            pass
+        return
+
+    filtered = [ln for ln in _read_log_lines(since_dt) if passes(ln)]
+
+    if tail > 0:
+        filtered = filtered[-tail:]
+
+    if not filtered:
+        click.echo("No log entries match the given filters.")
+        return
+
+    for line in filtered:
+        click.echo(line)

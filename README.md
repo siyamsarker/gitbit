@@ -23,6 +23,7 @@ Gitbit is a command-line tool for mirroring Git repositories with exact ref fide
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Commands](#commands)
+- [Log File](#log-file)
 - [Authentication](#authentication)
 - [Security](#security)
 - [Exit Codes](#exit-codes)
@@ -398,6 +399,67 @@ Mirrors a single repository without requiring a config file. Credentials are pic
 | `--parallel N` | Override the `parallel` value from config |
 | `--timeout SECONDS` | Override the `timeout` value from config |
 | `--verbose` | Enable DEBUG-level logging |
+
+---
+
+## Log File
+
+Every command writes a structured entry to `~/.gitbit/logs/gitbit.log`. The file rotates automatically at 5 MB and up to 5 backups are kept (≤ 30 MB total).
+
+### `logs` — view and filter the activity log
+
+```bash
+gitbit logs [OPTIONS]
+```
+
+Reads `~/.gitbit/logs/gitbit.log` and all rotated backups. No config file required.
+
+| Option | Default | Description |
+|---|---|---|
+| `-n N` / `--tail N` | `100` | Show the last N entries; `0` shows all |
+| `--level LEVEL` | — | Minimum level to show: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `--command CMD` | — | Filter by command: `sync-all`, `import-all`, `export-all`, `sync`, `validate`, `status` |
+| `--repo NAME` | — | Show only entries mentioning this repository name |
+| `--since EXPR` | — | Show entries from this point: `30m`, `2h`, `7d`, `2026-05-08`, `2026-05-08T10:30:00` |
+| `-f` / `--follow` | off | Stream new entries live — Ctrl-C to stop |
+
+**Examples:**
+
+```bash
+# Last 100 entries (default)
+gitbit logs
+
+# Show only errors
+gitbit logs --level ERROR
+
+# Show all sync-all activity from the last 24 hours
+gitbit logs --command sync-all --since 24h
+
+# Show all activity for one repository
+gitbit logs --repo "Test Project"
+
+# Show errors for a specific repo since a date
+gitbit logs --repo "Test Project" --level ERROR --since 2026-05-08
+
+# Follow the log live
+gitbit logs -f
+
+# Follow only sync-all errors live
+gitbit logs -f --command sync-all --level ERROR
+```
+
+**Sample log output:**
+
+```
+2026-05-08T10:30:00 INFO     sync-all     Starting sync for 1 repo(s)
+2026-05-08T10:30:01 INFO     sync-all     [Test Project] Cloning mirror from git@vcs.example.com:org/repo.git
+2026-05-08T10:30:08 INFO     sync-all     [Test Project] Pushing mirror to git@vcs.example.com:mirrors/repo.git
+2026-05-08T10:30:12 INFO     sync-all     [Test Project] Sync complete
+2026-05-08T10:30:12 INFO     sync-all     Summary: 1 succeeded, 0 failed
+2026-05-08T10:31:00 INFO     validate     Validating /root/.gitbit/repos.json
+2026-05-08T10:31:00 INFO     validate     All checks passed.
+2026-05-08T10:32:00 INFO     status       Mirror status — /root/.gitbit/repos.json
+```
 
 ---
 
