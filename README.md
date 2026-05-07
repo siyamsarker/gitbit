@@ -51,7 +51,7 @@ Gitbit is a command-line tool for mirroring Git repositories with exact ref fide
 ## Requirements
 
 - **Python** 3.9 or later
-- **Git** 2.x
+- **Git** 2.29 or later — required for negative refspec support (`^refs/...`) used to exclude GitLab-internal hidden refs during push
 - **git-lfs** _(optional)_ — required only when mirroring repositories with LFS objects ([installation guide](https://git-lfs.com/))
 
 ---

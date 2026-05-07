@@ -41,7 +41,7 @@ Public API (called by sync.py)
 -------------------------------
   clone_mirror()     — git clone --mirror
   fetch_mirror()     — git remote update --prune
-  push_mirror()      — git push --mirror
+  push_mirror()      — git push --prune refs/* (excludes GitLab hidden refs)
   lfs_fetch_all()    — git lfs fetch --all
   lfs_push_all()     — git lfs push --all
   gc_mirror()        — git gc --auto (best-effort, non-fatal)
@@ -379,15 +379,20 @@ def push_mirror(
     timeout: int,
     dry_run: bool,
 ) -> None:
-    """Push all refs from a local mirror to a destination repository.
+    """Push all standard refs from a local mirror to a destination repository.
 
     Runs from within the mirror directory:
-        git push --mirror <dest_url>
+        git push --prune <dest_url> refs/* ^refs/merge-requests/* \
+            ^refs/pipelines/* ^refs/environments/* ^refs/keep-around/*
 
-    The --mirror flag pushes every ref in the local mirror (branches, tags,
-    notes) to the destination and also deletes refs on the destination that
-    no longer exist locally. The result is an exact replica of the local mirror
-    state on the destination host.
+    Uses explicit refspecs with negative exclusions (requires Git 2.29+) instead
+    of --mirror. This is functionally equivalent for standard ref namespaces but
+    skips GitLab-internal hidden refs (merge-requests, pipelines, environments,
+    keep-around) that GitLab rejects with "deny updating a hidden ref" when pushed
+    to a destination repository.
+
+    --prune ensures refs deleted on the source are also removed from the
+    destination, preserving the same deletion semantics as --mirror.
 
     Args:
         local_dir: Path to the local bare mirror directory.
@@ -401,7 +406,14 @@ def push_mirror(
         GitOperationError: If git push fails after all retry attempts.
     """
     _retryable_run(
-        ["git", "push", "--mirror", dest_url],
+        [
+            "git", "push", "--prune", dest_url,
+            "refs/*",
+            "^refs/merge-requests/*",
+            "^refs/pipelines/*",
+            "^refs/environments/*",
+            "^refs/keep-around/*",
+        ],
         cwd=local_dir,
         env=env,
         timeout=timeout,
