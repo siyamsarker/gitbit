@@ -15,11 +15,24 @@ from tenacity import (
     wait_random,
 )
 
-from .exceptions import DiskSpaceError, GitOperationError
+from .exceptions import AuthError, DiskSpaceError, GitOperationError
 
 logger = logging.getLogger(__name__)
 
 MIN_FREE_GB = 1.0  # require at least 1 GB free before cloning
+
+# Stderr substrings that indicate an auth failure — these should not be retried.
+_AUTH_FAILURE_PATTERNS = (
+    "authentication failed",
+    "permission denied (publickey",
+    "could not read username",
+    "invalid username or password",
+    "remote: invalid username or password",
+    "fatal: could not read password",
+    "http basic: access denied",
+    "the requested url returned error: 401",
+    "the requested url returned error: 403",
+)
 
 
 def _run_command(
@@ -60,6 +73,12 @@ def _run_command(
     except FileNotFoundError as e:
         raise GitOperationError(f"Executable not found: {cmd[0]}") from e
     if result.returncode != 0:
+        stderr_lower = result.stderr.lower()
+        if any(p in stderr_lower for p in _AUTH_FAILURE_PATTERNS):
+            raise AuthError(
+                f"Authentication failed (exit {result.returncode}): {' '.join(display_cmd)}\n"
+                f"stderr: {result.stderr.strip()}"
+            )
         raise GitOperationError(
             f"Command failed (exit {result.returncode}): {' '.join(display_cmd)}\n"
             f"stderr: {result.stderr.strip()}"
@@ -97,6 +116,7 @@ def _retryable_run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
 
     Retries up to 5 times on GitOperationError. Waits between 4s and 60s with
     random jitter to avoid thundering-herd on a flaky remote.
+    AuthError is not retried — it propagates immediately.
     """
 
     @retry(

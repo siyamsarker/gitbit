@@ -4,14 +4,15 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 import click
 
 from . import __version__
-from .config import RepoConfig, load_config
+from .config import RepoConfig, load_config, validate_config
 from .exceptions import GitMirrorError
-from .sync import export_repo, import_repo, print_summary, run_parallel, sync_repo
+from .sync import export_repo, get_repo_status, import_repo, print_summary, run_parallel, sync_repo
 
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"], max_content_width=100)
@@ -296,3 +297,123 @@ def sync_single(
     else:
         click.echo(f"Failed: {result.message}", err=True)
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# validate
+# ---------------------------------------------------------------------------
+
+
+@main.command("validate")
+@_config_option
+@_verbose_option
+def validate_cmd(config_path: str, verbose: bool) -> None:
+    """Check the configuration file without making any network connections.
+
+    \b
+    Verifies:
+      - Valid JSON syntax and schema
+      - No duplicate repository names
+      - HTTPS token environment variables are set and non-empty
+      - SSH private key files exist on disk
+      - mirrors_dir accessibility (warning if absent)
+
+    Exits 0 if no errors are found (warnings do not affect the exit code).
+    """
+    _setup_logging(verbose)
+    try:
+        cfg = load_config(config_path)
+    except GitMirrorError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    issues = validate_config(cfg)
+    errors = [i for i in issues if i.severity == "error"]
+    warnings = [i for i in issues if i.severity == "warning"]
+
+    click.echo(f"Validating {config_path}")
+    click.echo(
+        f"  {len(cfg.repos)} repo(s) defined  |  "
+        f"mirrors_dir: {cfg.global_config.mirrors_dir}"
+    )
+    click.echo()
+
+    if not issues:
+        click.echo("  All checks passed.")
+    else:
+        for issue in issues:
+            tag = "[error]" if issue.severity == "error" else "[warn] "
+            scope = f"{issue.repo} > {issue.field}" if issue.repo else issue.field
+            click.echo(f"  {tag}  {scope}: {issue.message}")
+
+    click.echo()
+    click.echo(f"  {len(errors)} error(s), {len(warnings)} warning(s)")
+
+    if errors:
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# status
+# ---------------------------------------------------------------------------
+
+
+def _format_age(ts: float) -> str:
+    """Return a human-readable age string for a Unix timestamp."""
+    delta = int(time.time() - ts)
+    if delta < 60:
+        return f"{delta}s ago"
+    if delta < 3600:
+        return f"{delta // 60}m ago"
+    if delta < 86400:
+        return f"{delta // 3600}h ago"
+    return f"{delta // 86400}d ago"
+
+
+@main.command("status")
+@_config_option
+@_verbose_option
+def status_cmd(config_path: str, verbose: bool) -> None:
+    """Show local mirror status for all configured repositories.
+
+    \b
+    Displays for each repository:
+      - Whether the local mirror directory exists
+      - Total mirror size on disk
+      - Time since the mirror was last modified
+
+    No network connections are made.
+    """
+    _setup_logging(verbose)
+    try:
+        cfg = load_config(config_path)
+    except GitMirrorError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    statuses = [get_repo_status(r, cfg.global_config.mirrors_dir) for r in cfg.repos]
+    present = sum(1 for s in statuses if s.present)
+
+    click.echo(f"Mirror status  —  {config_path}")
+    click.echo(f"Mirrors directory: {cfg.global_config.mirrors_dir}")
+    click.echo()
+
+    if not statuses:
+        click.echo("  No repositories defined.")
+        return
+
+    name_w = max(len(s.name) for s in statuses) + 2
+
+    click.echo(f"  {'NAME':<{name_w}}  {'MIRROR':<9}  {'SIZE':<11}  LAST MODIFIED")
+    click.echo(f"  {'-' * name_w}  {'-' * 7}  {'-' * 9}  {'-' * 20}")
+
+    for s in statuses:
+        if s.present:
+            size = f"{s.size_mb:.1f} MB"
+            modified = _format_age(s.last_modified) if s.last_modified else "—"
+            click.echo(f"  {s.name:<{name_w}}  {'present':<9}  {size:<11}  {modified}")
+        else:
+            click.echo(f"  {s.name:<{name_w}}  {'missing':<9}  {'—':<11}  —")
+
+    click.echo()
+    click.echo(f"  {len(statuses)} repo(s)  —  {present} mirrored, {len(statuses) - present} pending")

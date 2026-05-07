@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -29,7 +31,6 @@ class RepoConfig(BaseModel):
     dest: str
     auth: Optional[AuthConfig] = None
     lfs: bool = False
-    submodules: bool = False
 
 
 class GlobalConfig(BaseModel):
@@ -64,3 +65,66 @@ def load_config(path: str) -> Config:
         return Config.model_validate(data)
     except ValidationError as e:
         raise ConfigError(f"Config validation failed:\n{e}")
+
+
+@dataclass
+class ValidationIssue:
+    field: str
+    message: str
+    severity: str  # "error" | "warning"
+    repo: Optional[str] = None  # None = global-level issue
+
+
+def validate_config(cfg: Config) -> list[ValidationIssue]:
+    """Check config for structural issues, missing env vars, and missing key files.
+
+    Returns a list of ValidationIssue. An empty list means no issues found.
+    Makes no network connections.
+    """
+    issues: list[ValidationIssue] = []
+
+    # Duplicate repo names
+    seen: set[str] = set()
+    for repo in cfg.repos:
+        if repo.name in seen:
+            issues.append(ValidationIssue(
+                field="name",
+                message=f"Duplicate repository name '{repo.name}'",
+                severity="error",
+                repo=repo.name,
+            ))
+        seen.add(repo.name)
+
+    # mirrors_dir existence (warning only — created automatically on first import)
+    if not Path(cfg.global_config.mirrors_dir).exists():
+        issues.append(ValidationIssue(
+            field="mirrors_dir",
+            message=(
+                f"'{cfg.global_config.mirrors_dir}' does not exist"
+                " — will be created automatically on first import"
+            ),
+            severity="warning",
+        ))
+
+    # Per-repo auth checks
+    for repo in cfg.repos:
+        if repo.auth is None:
+            continue
+        if repo.auth.type == "https" and repo.auth.token_env:
+            if not os.environ.get(repo.auth.token_env):
+                issues.append(ValidationIssue(
+                    field="auth.token_env",
+                    message=f"Environment variable '{repo.auth.token_env}' is not set or empty",
+                    severity="error",
+                    repo=repo.name,
+                ))
+        elif repo.auth.type == "ssh" and repo.auth.private_key:
+            if not Path(repo.auth.private_key).exists():
+                issues.append(ValidationIssue(
+                    field="auth.private_key",
+                    message=f"SSH key not found: {repo.auth.private_key}",
+                    severity="error",
+                    repo=repo.name,
+                ))
+
+    return issues

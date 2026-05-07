@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gitbit.exceptions import DiskSpaceError, GitOperationError
+from gitbit.exceptions import AuthError, DiskSpaceError, GitOperationError
 from gitbit.git_ops import (
     MIN_FREE_GB,
     _run_command,
@@ -67,6 +67,47 @@ class TestRunCommand:
         _run_command(["git", "status"])
         _, kwargs = mock_run.call_args
         assert kwargs.get("shell", False) is False
+
+    def test_auth_failure_stderr_raises_auth_error(self, mocker) -> None:
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["git", "push"], 128, "", "fatal: Authentication failed for 'https://github.com/'"
+        )
+        with pytest.raises(AuthError, match="Authentication failed"):
+            _run_command(["git", "push"])
+
+    def test_permission_denied_raises_auth_error(self, mocker) -> None:
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["git", "fetch"], 128, "", "Permission denied (publickey,gssapi-keyex)"
+        )
+        with pytest.raises(AuthError):
+            _run_command(["git", "fetch"])
+
+    def test_generic_failure_raises_git_operation_error_not_auth_error(self, mocker) -> None:
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["git", "push"], 1, "", "error: failed to push some refs"
+        )
+        with pytest.raises(GitOperationError):
+            _run_command(["git", "push"])
+
+    def test_auth_error_not_retried_by_retryable_run(self, mocker) -> None:
+        from gitbit.git_ops import _retryable_run
+
+        call_count = 0
+
+        def mock_subprocess(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return subprocess.CompletedProcess(
+                args[0], 128, "", "fatal: Authentication failed for 'https://x.com/'"
+            )
+
+        mocker.patch("subprocess.run", side_effect=mock_subprocess)
+        with pytest.raises(AuthError):
+            _retryable_run(["git", "push", "origin"])
+        assert call_count == 1  # must not retry
 
     def test_redact_args_hides_credential_in_log(self, mocker, caplog) -> None:
         import logging

@@ -29,6 +29,8 @@ Gitbit is a command-line tool for mirroring Git repositories with exact ref fide
 
 ---
 
+---
+
 ## Features
 
 | Capability | Detail |
@@ -37,9 +39,11 @@ Gitbit is a command-line tool for mirroring Git repositories with exact ref fide
 | **Git LFS support** | Optionally transfers all LFS objects alongside the repository |
 | **SSH & HTTPS auth** | SSH agent / key file, or HTTPS token injected from an environment variable |
 | **Parallel execution** | Processes multiple repositories concurrently with a configurable worker limit |
-| **Automatic retries** | Exponential backoff with jitter on transient network failures (up to 5 attempts) |
+| **Automatic retries** | Exponential backoff with jitter on transient network failures (up to 5 attempts); auth failures fail immediately without retrying |
 | **Disk space guard** | Pre-flight check before cloning to prevent partial writes on full disks |
 | **Dry-run mode** | Prints every git command without executing — safe for testing configuration |
+| **Config validation** | Checks env vars, SSH key paths, and config structure without touching the network |
+| **Mirror status** | Shows each repo's local mirror size and last-modified time at a glance |
 | **Flexible invocation** | Batch mode via JSON config file, or ad-hoc single-repo mirroring inline |
 
 ---
@@ -198,6 +202,51 @@ gitbit export-all -c repos.json [OPTIONS]
 
 Pushes each local mirror to its configured destination. Local mirrors must already exist — run `import-all` first, or use `sync-all` to perform both steps in one command.
 
+### `validate` — check configuration without network access
+
+```bash
+gitbit validate -c repos.json
+```
+
+Verifies the configuration file before running any sync operations. Checks for:
+
+- Valid JSON syntax and schema
+- Duplicate repository names
+- HTTPS token environment variables (must be set and non-empty)
+- SSH private key files (must exist on disk)
+- `mirrors_dir` accessibility (warning if the directory does not yet exist)
+
+Exits `0` if no errors are found. Warnings do not affect the exit code.
+
+```
+Validating repos.json
+  2 repo(s) defined  |  mirrors_dir: /home/user/.gitbit/mirrors
+
+  [error]  RepoB > auth.token_env: Environment variable 'GITLAB_TOKEN' is not set or empty
+
+  1 error(s), 0 warning(s)
+```
+
+### `status` — show local mirror state
+
+```bash
+gitbit status -c repos.json
+```
+
+Displays each repository's local mirror directory, total size on disk, and time since last modification. No network connections are made.
+
+```
+Mirror status  —  repos.json
+Mirrors directory: /home/user/.gitbit/mirrors
+
+  NAME        MIRROR     SIZE         LAST MODIFIED
+  ----------  -------    ---------    --------------------
+  ProjectA    present    142.3 MB     2h ago
+  RepoB       missing    —            —
+
+  2 repo(s)  —  1 mirrored, 1 pending
+```
+
 ### `sync` — ad-hoc single repository
 
 ```bash
@@ -266,6 +315,7 @@ Gitbit is designed with credential safety and subprocess hygiene as first-class 
 - **SSH key path quoting** — key paths are shell-quoted via `shlex.quote()` before being placed in `GIT_SSH_COMMAND`, preventing issues with spaces or special characters.
 - **Credential isolation** — HTTPS tokens are read from environment variables at runtime, not stored in the config file.
 - **Log sanitisation** — credentials are stripped from every log message before output; tokens never appear in `--verbose` traces.
+- **Auth failures fail immediately** — authentication errors (wrong key, expired token, HTTP 401/403) are detected from git's stderr and raised as a distinct exception that bypasses the retry loop. A bad credential fails in one attempt, not five.
 - **Config file hygiene** — `repos.json` is listed in `.gitignore` by default. Do not commit it to version control.
 
 ---

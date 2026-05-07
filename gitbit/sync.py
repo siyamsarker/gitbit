@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from .auth import build_auth_env, inject_https_token, safe_url
 from .config import RepoConfig
@@ -23,8 +24,57 @@ class RepoResult:
     message: str = ""
 
 
+@dataclass
+class RepoStatus:
+    name: str
+    mirror_path: str
+    present: bool
+    size_mb: float = 0.0
+    last_modified: Optional[float] = None  # Unix timestamp; None if mirror absent
+
+
 def _mirrors_path(mirrors_dir: str, name: str) -> str:
     return str(Path(mirrors_dir) / f"{name}.git")
+
+
+def _dir_size_mb(path: str) -> float:
+    """Return total size of all files under path in megabytes."""
+    total = 0
+    for dirpath, _, filenames in os.walk(path):
+        for fname in filenames:
+            try:
+                total += os.path.getsize(os.path.join(dirpath, fname))
+            except OSError:
+                pass
+    return total / (1024 * 1024)
+
+
+def _dir_last_modified(path: str) -> Optional[float]:
+    """Return the most recent mtime of any file under path, or None."""
+    latest: Optional[float] = None
+    for dirpath, _, filenames in os.walk(path):
+        for fname in filenames:
+            try:
+                mtime = os.path.getmtime(os.path.join(dirpath, fname))
+                if latest is None or mtime > latest:
+                    latest = mtime
+            except OSError:
+                pass
+    return latest
+
+
+def get_repo_status(repo: RepoConfig, mirrors_dir: str) -> RepoStatus:
+    """Return local mirror status for a repository — no network access."""
+    local_dir = _mirrors_path(mirrors_dir, repo.name)
+    if not Path(local_dir).exists():
+        return RepoStatus(name=repo.name, mirror_path=local_dir, present=False)
+    return RepoStatus(
+        name=repo.name,
+        mirror_path=local_dir,
+        present=True,
+        size_mb=_dir_size_mb(local_dir),
+        last_modified=_dir_last_modified(local_dir),
+    )
 
 
 def import_repo(

@@ -9,7 +9,9 @@ from gitbit.config import AuthConfig, RepoConfig
 from gitbit.exceptions import GitOperationError
 from gitbit.sync import (
     RepoResult,
+    RepoStatus,
     export_repo,
+    get_repo_status,
     import_repo,
     print_summary,
     run_parallel,
@@ -244,3 +246,61 @@ class TestPrintSummary:
             print_summary(results)
         assert "1 succeeded" in caplog.text
         assert "1 failed" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# get_repo_status
+# ---------------------------------------------------------------------------
+
+
+class TestGetRepoStatus:
+    def test_missing_mirror_returns_not_present(self, tmp_path: Path) -> None:
+        repo = _make_repo("NoMirror")
+        status = get_repo_status(repo, str(tmp_path))
+        assert status.present is False
+        assert status.name == "NoMirror"
+        assert status.size_mb == 0.0
+        assert status.last_modified is None
+
+    def test_existing_mirror_returns_present(self, tmp_path: Path) -> None:
+        mirror = tmp_path / "TestRepo.git"
+        mirror.mkdir()
+        (mirror / "HEAD").write_text("ref: refs/heads/main\n")
+        repo = _make_repo("TestRepo")
+        status = get_repo_status(repo, str(tmp_path))
+        assert status.present is True
+        assert status.size_mb > 0
+        assert status.last_modified is not None
+
+    def test_mirror_path_is_correct(self, tmp_path: Path) -> None:
+        repo = _make_repo("MyRepo")
+        status = get_repo_status(repo, str(tmp_path))
+        assert status.mirror_path.endswith("MyRepo.git")
+
+    def test_size_reflects_file_contents(self, tmp_path: Path) -> None:
+        mirror = tmp_path / "SizedRepo.git"
+        mirror.mkdir()
+        (mirror / "packfile").write_bytes(b"x" * 1024 * 512)  # 512 KB
+        repo = _make_repo("SizedRepo")
+        status = get_repo_status(repo, str(tmp_path))
+        assert status.size_mb == pytest.approx(0.5, abs=0.01)
+
+    def test_dir_size_handles_oserror_gracefully(self, tmp_path: Path, mocker) -> None:
+        from gitbit.sync import _dir_size_mb
+
+        mirror = tmp_path / "ErrRepo.git"
+        mirror.mkdir()
+        (mirror / "HEAD").write_text("ref: refs/heads/main\n")
+        mocker.patch("os.path.getsize", side_effect=OSError("gone"))
+        size = _dir_size_mb(str(mirror))
+        assert size == 0.0
+
+    def test_dir_last_modified_handles_oserror_gracefully(self, tmp_path: Path, mocker) -> None:
+        from gitbit.sync import _dir_last_modified
+
+        mirror = tmp_path / "ErrRepo.git"
+        mirror.mkdir()
+        (mirror / "HEAD").write_text("ref: refs/heads/main\n")
+        mocker.patch("os.path.getmtime", side_effect=OSError("gone"))
+        result = _dir_last_modified(str(mirror))
+        assert result is None

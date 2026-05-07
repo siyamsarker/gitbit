@@ -11,16 +11,14 @@
       "source": "git@github.com:org/ProjectA.git",
       "dest": "git@backup.example.com:mirrors/ProjectA.git",
       "auth": {"type": "ssh", "private_key": "~/.ssh/id_rsa"},
-      "lfs": true,
-      "submodules": false
+      "lfs": true
     },
     {
       "name": "RepoB",
       "source": "https://gitlab.com/team/RepoB.git",
       "dest": "https://git.example.com/team/RepoB.git",
       "auth": {"type": "https", "token_env": "GITLAB_TOKEN"},
-      "lfs": false,
-      "submodules": false
+      "lfs": false
     }
   ]
 }

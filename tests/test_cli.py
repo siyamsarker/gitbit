@@ -27,7 +27,6 @@ def _make_config_file(tmp_path: Path, repos: list[dict] | None = None) -> str:
                 "source": "git@github.com:org/RepoA.git",
                 "dest": "git@backup.example.com:mirrors/RepoA.git",
                 "lfs": False,
-                "submodules": False,
             }
         ],
     }
@@ -375,3 +374,138 @@ class TestSyncSingle:
             )
         _, kwargs = mock_sync.call_args
         assert kwargs["dry_run"] is True
+
+
+# ---------------------------------------------------------------------------
+# validate
+# ---------------------------------------------------------------------------
+
+
+class TestValidateCmd:
+    def test_valid_config_exits_zero(self, tmp_path):
+        config = _make_config_file(tmp_path)
+        runner = CliRunner()
+        with patch("gitbit.cli.validate_config", return_value=[]):
+            result = runner.invoke(main, ["validate", "-c", config])
+        assert result.exit_code == 0
+        assert "All checks passed" in result.output
+
+    def test_config_errors_exit_one(self, tmp_path):
+        from gitbit.config import ValidationIssue
+        config = _make_config_file(tmp_path)
+        runner = CliRunner()
+        issues = [ValidationIssue(field="auth.token_env", message="TOKEN not set",
+                                  severity="error", repo="RepoA")]
+        with patch("gitbit.cli.validate_config", return_value=issues):
+            result = runner.invoke(main, ["validate", "-c", config])
+        assert result.exit_code == 1
+        assert "[error]" in result.output
+
+    def test_warnings_only_exit_zero(self, tmp_path):
+        from gitbit.config import ValidationIssue
+        config = _make_config_file(tmp_path)
+        runner = CliRunner()
+        issues = [ValidationIssue(field="mirrors_dir", message="does not exist",
+                                  severity="warning")]
+        with patch("gitbit.cli.validate_config", return_value=issues):
+            result = runner.invoke(main, ["validate", "-c", config])
+        assert result.exit_code == 0
+        assert "[warn]" in result.output
+
+    def test_missing_config_exits_one(self, tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(main, ["validate", "-c", str(tmp_path / "nope.json")])
+        assert result.exit_code == 1
+
+    def test_output_shows_repo_count_and_mirrors_dir(self, tmp_path):
+        config = _make_config_file(tmp_path)
+        runner = CliRunner()
+        with patch("gitbit.cli.validate_config", return_value=[]):
+            result = runner.invoke(main, ["validate", "-c", config])
+        assert "1 repo(s)" in result.output
+
+
+# ---------------------------------------------------------------------------
+# status
+# ---------------------------------------------------------------------------
+
+
+class TestStatusCmd:
+    def test_shows_present_and_missing_repos(self, tmp_path):
+        from gitbit.sync import RepoStatus
+        config = _make_config_file(tmp_path)
+        runner = CliRunner()
+        statuses = [RepoStatus(name="RepoA", mirror_path="/m/RepoA.git",
+                               present=True, size_mb=12.5, last_modified=None)]
+        with patch("gitbit.cli.get_repo_status", side_effect=statuses):
+            result = runner.invoke(main, ["status", "-c", config])
+        assert result.exit_code == 0
+        assert "present" in result.output
+        assert "RepoA" in result.output
+
+    def test_missing_mirror_shown_as_missing(self, tmp_path):
+        from gitbit.sync import RepoStatus
+        config = _make_config_file(tmp_path)
+        runner = CliRunner()
+        statuses = [RepoStatus(name="RepoA", mirror_path="/m/RepoA.git", present=False)]
+        with patch("gitbit.cli.get_repo_status", side_effect=statuses):
+            result = runner.invoke(main, ["status", "-c", config])
+        assert result.exit_code == 0
+        assert "missing" in result.output
+
+    def test_missing_config_exits_one(self, tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(main, ["status", "-c", str(tmp_path / "nope.json")])
+        assert result.exit_code == 1
+
+    def test_summary_line_shows_counts(self, tmp_path):
+        from gitbit.sync import RepoStatus
+        config = _make_config_file(tmp_path)
+        runner = CliRunner()
+        statuses = [RepoStatus(name="RepoA", mirror_path="/m/RepoA.git",
+                               present=True, size_mb=5.0, last_modified=None)]
+        with patch("gitbit.cli.get_repo_status", side_effect=statuses):
+            result = runner.invoke(main, ["status", "-c", config])
+        assert "1 repo(s)" in result.output
+
+    def test_empty_repos_shows_no_repositories_message(self, tmp_path):
+        p = tmp_path / "empty.json"
+        p.write_text(json.dumps({"global": {"mirrors_dir": str(tmp_path)}, "repos": []}))
+        runner = CliRunner()
+        result = runner.invoke(main, ["status", "-c", str(p)])
+        assert result.exit_code == 0
+        assert "No repositories defined" in result.output
+
+    def test_last_modified_shown_when_present(self, tmp_path):
+        import time
+        from gitbit.sync import RepoStatus
+        config = _make_config_file(tmp_path)
+        runner = CliRunner()
+        ts = time.time() - 90  # 90 seconds ago → "1m ago"
+        statuses = [RepoStatus(name="RepoA", mirror_path="/m/RepoA.git",
+                               present=True, size_mb=1.0, last_modified=ts)]
+        with patch("gitbit.cli.get_repo_status", side_effect=statuses):
+            result = runner.invoke(main, ["status", "-c", config])
+        assert "ago" in result.output
+
+
+class TestFormatAge:
+    def test_seconds(self):
+        from gitbit.cli import _format_age
+        import time
+        assert "s ago" in _format_age(time.time() - 30)
+
+    def test_minutes(self):
+        from gitbit.cli import _format_age
+        import time
+        assert "m ago" in _format_age(time.time() - 120)
+
+    def test_hours(self):
+        from gitbit.cli import _format_age
+        import time
+        assert "h ago" in _format_age(time.time() - 7200)
+
+    def test_days(self):
+        from gitbit.cli import _format_age
+        import time
+        assert "d ago" in _format_age(time.time() - 172800)

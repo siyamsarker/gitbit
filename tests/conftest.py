@@ -33,7 +33,6 @@ def sample_config_dict(tmp_path: Path) -> dict:
                 "dest": "git@backup.example.com:mirrors/RepoA.git",
                 "auth": {"type": "ssh", "private_key": "~/.ssh/id_rsa"},
                 "lfs": False,
-                "submodules": False,
             },
             {
                 "name": "RepoB",
@@ -41,7 +40,6 @@ def sample_config_dict(tmp_path: Path) -> dict:
                 "dest": "https://git.example.com/team/RepoB.git",
                 "auth": {"type": "https", "token_env": "GITLAB_TOKEN"},
                 "lfs": False,
-                "submodules": False,
             },
         ],
     }
