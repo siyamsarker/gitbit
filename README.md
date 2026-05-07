@@ -5,7 +5,7 @@
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.9%2B-blue?style=flat-square" alt="Python 3.9+"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
     <a href="https://github.com/psf/black"><img src="https://img.shields.io/badge/code%20style-black-000000?style=flat-square" alt="Code style: black"></a>
-    <a href="https://github.com/siyamsarker/gitbit"><img src="https://img.shields.io/badge/version-0.2.0-informational?style=flat-square" alt="Version 0.1.0"></a>
+    <a href="https://github.com/siyamsarker/gitbit"><img src="https://img.shields.io/badge/version-0.3.0-informational?style=flat-square" alt="Version 0.1.0"></a>
   </p>
 </p>
 
