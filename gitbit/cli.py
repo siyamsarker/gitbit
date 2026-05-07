@@ -1,11 +1,43 @@
-"""Click-based CLI entry point for gitbit."""
+"""
+Click-based command-line interface for gitbit.
+
+This module defines all user-facing subcommands and wires them to the sync
+and config layers. It is the outermost layer of the application — it handles
+user input, sets up logging, and translates library results into exit codes.
+
+Command overview
+----------------
+  sync-all    Full pipeline: fetch all sources, push to all destinations.
+  import-all  Fetch sources only (no push). Stage mirrors for later export.
+  export-all  Push mirrors to destinations only (no fetch). Requires import first.
+  sync        Ad-hoc single-repo mirror without a config file.
+  validate    Check the config file offline — no network, no git calls.
+  status      Show local mirror state (size, last-modified) — no network.
+
+Architecture notes
+------------------
+  Shared option decorators (_config_option, _dry_run_option, etc.) are defined
+  once as module-level Click option objects and applied via the decorator syntax
+  (@_config_option) to avoid duplicating the same option definitions across the
+  four batch commands.
+
+  _setup_logging() is called at the start of every command so the log level
+  and format are consistent regardless of which subcommand is invoked.
+
+  All commands catch GitMirrorError from the config/sync layers and convert
+  them to a user-readable message on stderr + sys.exit(1). Library code never
+  calls sys.exit() directly.
+
+  Exit codes:
+    0 — all repos succeeded (or no errors found for validate).
+    1 — one or more repos failed, config is invalid, or errors were found.
+"""
 from __future__ import annotations
 
 import logging
 import os
 import sys
 import time
-from pathlib import Path
 
 import click
 
@@ -15,10 +47,22 @@ from .exceptions import GitMirrorError
 from .sync import export_repo, get_repo_status, import_repo, print_summary, run_parallel, sync_repo
 
 
+# Shared Click context settings: support both -h and --help, and allow longer
+# help text to avoid word-wrapping option descriptions too aggressively.
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"], max_content_width=100)
 
 
 def _setup_logging(verbose: bool) -> None:
+    """Configure the root logger for the current command invocation.
+
+    Sets up a single StreamHandler to stderr with a timestamp + level prefix.
+    DEBUG level is enabled when verbose=True (--verbose flag); INFO otherwise.
+    Called at the start of every command before any library code runs.
+
+    Args:
+        verbose: When True, sets the log level to DEBUG to show every git
+                 command, retry attempt, and internal state transition.
+    """
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
@@ -45,6 +89,15 @@ def main() -> None:
 
 # ---------------------------------------------------------------------------
 # Shared option decorators
+#
+# Defined once here and applied to each batch command via:
+#   @main.command("name")
+#   @_config_option
+#   @_dry_run_option
+#   ...
+#
+# This avoids repeating the same option definitions in four places and
+# ensures that all batch commands have identical flag names and help text.
 # ---------------------------------------------------------------------------
 
 _config_option = click.option(
@@ -117,8 +170,11 @@ def sync_all(
     except GitMirrorError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
+    # CLI flags override config values when provided; fall back to config defaults.
     workers = parallel or cfg.global_config.parallel
     secs = timeout or cfg.global_config.timeout
+
     results = run_parallel(
         sync_repo,
         cfg.repos,
@@ -128,6 +184,8 @@ def sync_all(
         dry_run=dry_run,
     )
     print_summary(results)
+
+    # Exit 1 if any repo failed so the caller (cron, CI, etc.) can detect errors.
     if any(not r.success for r in results):
         sys.exit(1)
 
@@ -166,8 +224,10 @@ def import_all(
     except GitMirrorError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
     workers = parallel or cfg.global_config.parallel
     secs = timeout or cfg.global_config.timeout
+
     results = run_parallel(
         import_repo,
         cfg.repos,
@@ -177,6 +237,7 @@ def import_all(
         dry_run=dry_run,
     )
     print_summary(results)
+
     if any(not r.success for r in results):
         sys.exit(1)
 
@@ -214,8 +275,10 @@ def export_all(
     except GitMirrorError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
     workers = parallel or cfg.global_config.parallel
     secs = timeout or cfg.global_config.timeout
+
     results = run_parallel(
         export_repo,
         cfg.repos,
@@ -225,6 +288,7 @@ def export_all(
         dry_run=dry_run,
     )
     print_summary(results)
+
     if any(not r.success for r in results):
         sys.exit(1)
 
@@ -288,10 +352,17 @@ def sync_single(
     Credentials are picked up from SSH agent or environment variables.
     """
     _setup_logging(verbose)
+
+    # Expand ~ and $VAR in the mirrors-dir path since Click does not do this
+    # automatically (unlike GlobalConfig's Pydantic validator).
     mirrors_dir = os.path.expandvars(os.path.expanduser(mirrors_dir))
     secs = timeout or 300
+
+    # Build a minimal RepoConfig with no auth block — credentials come from
+    # the ambient SSH agent or environment, which git uses by default.
     repo = RepoConfig(name=name, source=source, dest=dest, lfs=lfs)
     result = sync_repo(repo, mirrors_dir, timeout=secs, dry_run=dry_run)
+
     if result.success:
         click.echo(f"Success: {result.message}")
     else:
@@ -327,6 +398,7 @@ def validate_cmd(config_path: str, verbose: bool) -> None:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
+    # Collect all semantic issues; separate into errors and warnings for display.
     issues = validate_config(cfg)
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]
@@ -341,6 +413,8 @@ def validate_cmd(config_path: str, verbose: bool) -> None:
     if not issues:
         click.echo("  All checks passed.")
     else:
+        # Print every issue with a severity tag and the dotted field path so the
+        # user knows exactly what to fix and where to find it in the config file.
         for issue in issues:
             tag = "[error]" if issue.severity == "error" else "[warn] "
             scope = f"{issue.repo} > {issue.field}" if issue.repo else issue.field
@@ -349,6 +423,8 @@ def validate_cmd(config_path: str, verbose: bool) -> None:
     click.echo()
     click.echo(f"  {len(errors)} error(s), {len(warnings)} warning(s)")
 
+    # Only errors cause a non-zero exit. Warnings are informational and should
+    # not block automated pipelines that run validate as a pre-flight step.
     if errors:
         sys.exit(1)
 
@@ -359,7 +435,17 @@ def validate_cmd(config_path: str, verbose: bool) -> None:
 
 
 def _format_age(ts: float) -> str:
-    """Return a human-readable age string for a Unix timestamp."""
+    """Convert a Unix timestamp to a human-readable relative age string.
+
+    Used in the status table to show when each mirror was last updated.
+    Rounds down to the nearest whole unit for brevity.
+
+    Args:
+        ts: Unix timestamp (float) to measure age from now.
+
+    Returns:
+        A short string like '42s ago', '15m ago', '3h ago', or '2d ago'.
+    """
     delta = int(time.time() - ts)
     if delta < 60:
         return f"{delta}s ago"
@@ -391,6 +477,7 @@ def status_cmd(config_path: str, verbose: bool) -> None:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
+    # Collect status for every repo by walking their local mirror directories.
     statuses = [get_repo_status(r, cfg.global_config.mirrors_dir) for r in cfg.repos]
     present = sum(1 for s in statuses if s.present)
 
@@ -402,6 +489,8 @@ def status_cmd(config_path: str, verbose: bool) -> None:
         click.echo("  No repositories defined.")
         return
 
+    # Compute column width dynamically based on the longest repo name so the
+    # table stays aligned regardless of name length.
     name_w = max(len(s.name) for s in statuses) + 2
 
     click.echo(f"  {'NAME':<{name_w}}  {'MIRROR':<9}  {'SIZE':<11}  LAST MODIFIED")
@@ -410,10 +499,12 @@ def status_cmd(config_path: str, verbose: bool) -> None:
     for s in statuses:
         if s.present:
             size = f"{s.size_mb:.1f} MB"
+            # last_modified is None only for empty directories; normally it is set.
             modified = _format_age(s.last_modified) if s.last_modified else "—"
             click.echo(f"  {s.name:<{name_w}}  {'present':<9}  {size:<11}  {modified}")
         else:
             click.echo(f"  {s.name:<{name_w}}  {'missing':<9}  {'—':<11}  —")
 
     click.echo()
-    click.echo(f"  {len(statuses)} repo(s)  —  {present} mirrored, {len(statuses) - present} pending")
+    pending = len(statuses) - present
+    click.echo(f"  {len(statuses)} repo(s)  —  {present} mirrored, {pending} pending")
