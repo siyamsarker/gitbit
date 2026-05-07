@@ -125,3 +125,10 @@ class TestSafeUrl:
     def test_ssh_url_no_credentials_unchanged(self) -> None:
         url = "git@github.com:org/repo.git"
         assert safe_url(url) == url
+
+    def test_url_with_credentials_and_port_preserves_port(self) -> None:
+        url = "https://oauth2:s3cr3t@git.example.com:8443/org/repo.git"
+        result = safe_url(url)
+        assert "s3cr3t" not in result
+        assert "8443" in result
+        assert "git.example.com:8443" in result

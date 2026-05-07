@@ -51,8 +51,7 @@ dmypy.json
 *~
 .DS_Store
 
-# git-mirror local mirror storage
-~/.git-mirror/
+# Local mirror storage (default: ~/.gitbit/mirrors/)
 mirrors/
 *.git/
 

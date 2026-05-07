@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 from urllib.parse import urlparse, urlunparse
 
 from .config import AuthConfig
@@ -21,7 +22,7 @@ def build_auth_env(auth: AuthConfig | None, base_env: dict) -> dict:
     if auth.type == "ssh":
         if auth.private_key:
             env["GIT_SSH_COMMAND"] = (
-                f"ssh -i {auth.private_key} -o StrictHostKeyChecking=accept-new"
+                f"ssh -i {shlex.quote(auth.private_key)} -o StrictHostKeyChecking=accept-new"
                 " -o BatchMode=yes"
             )
     return env
@@ -54,9 +55,12 @@ def safe_url(url: str) -> str:
     """Return url with credentials stripped, safe for logging.
 
     Removes any username/password from the netloc so tokens never appear in logs.
+    Preserves host and port.
     """
     parsed = urlparse(url)
     if parsed.password or parsed.username:
-        safe = parsed._replace(netloc=parsed.hostname or "")
-        return urlunparse(safe)
+        host = parsed.hostname or ""
+        if parsed.port:
+            host = f"{host}:{parsed.port}"
+        return urlunparse(parsed._replace(netloc=host))
     return url

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from .auth import build_auth_env, inject_https_token, safe_url
-from .config import Config, RepoConfig
+from .config import RepoConfig
 from .exceptions import GitMirrorError
 from . import git_ops
 

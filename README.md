@@ -1,328 +1,231 @@
-# Gitbit
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
-
-A CLI tool for mirroring Git repositories with **full ref fidelity** — all branches, tags, and
-notes are preserved. Supports SSH and HTTPS authentication, Git LFS, parallel syncing, and
-automatic retries with exponential backoff.
+<p align="center">
+  <h1 align="center">Gitbit</h1>
+  <p align="center">Mirror Git repositories with full ref fidelity — branches, tags, notes, and LFS objects.</p>
+  <p align="center">
+    <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.9%2B-blue?style=flat-square" alt="Python 3.9+"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
+    <a href="https://github.com/psf/black"><img src="https://img.shields.io/badge/code%20style-black-000000?style=flat-square" alt="Code style: black"></a>
+    <a href="https://github.com/siyamsarker/gitbit"><img src="https://img.shields.io/badge/version-0.1.0-informational?style=flat-square" alt="Version 0.1.0"></a>
+  </p>
+</p>
 
 ---
 
-## Table of contents
+Gitbit is a command-line tool for mirroring Git repositories with exact ref fidelity. It uses `git clone --mirror` and `git push --mirror` to replicate every branch, tag, note, and internal ref from a source to a destination — not just the default branch. It is designed for automated backup pipelines, cross-host repository replication, and disaster recovery workflows.
 
+## Table of Contents
+
+- [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
-- [Uninstall](#uninstall)
+- [Quick Start](#quick-start)
 - [Configuration](#configuration)
-- [Usage](#usage)
-  - [sync — mirror a single repo](#sync--mirror-a-single-repo)
-  - [sync-all — mirror all repos from config](#sync-all--mirror-all-repos-from-config)
-  - [import-all — fetch only](#import-all--fetch-only)
-  - [export-all — push only](#export-all--push-only)
-  - [Flags reference](#flags-reference)
-  - [Dry-run mode](#dry-run-mode)
-  - [Verbose logging](#verbose-logging)
+- [Commands](#commands)
 - [Authentication](#authentication)
-- [Exit codes](#exit-codes)
+- [Security](#security)
+- [Exit Codes](#exit-codes)
 - [Contributing](#contributing)
 - [License](#license)
 
 ---
 
+## Features
+
+| Capability | Detail |
+|---|---|
+| **Full ref mirroring** | Replicates every branch, tag, note, and internal ref via `--mirror` |
+| **Git LFS support** | Optionally transfers all LFS objects alongside the repository |
+| **SSH & HTTPS auth** | SSH agent / key file, or HTTPS token injected from an environment variable |
+| **Parallel execution** | Processes multiple repositories concurrently with a configurable worker limit |
+| **Automatic retries** | Exponential backoff with jitter on transient network failures (up to 5 attempts) |
+| **Disk space guard** | Pre-flight check before cloning to prevent partial writes on full disks |
+| **Dry-run mode** | Prints every git command without executing — safe for testing configuration |
+| **Flexible invocation** | Batch mode via JSON config file, or ad-hoc single-repo mirroring inline |
+
+---
+
 ## Requirements
 
-- Python 3.9 or newer
-- `git` installed and available in `$PATH`
-- `git-lfs` *(optional — only needed if any repo uses LFS)*
+- **Python** 3.9 or later
+- **Git** 2.x
+- **git-lfs** _(optional)_ — required only when mirroring repositories with LFS objects ([installation guide](https://git-lfs.com/))
 
 ---
 
 ## Installation
 
-**macOS / Linux**
+### Option A — Install via pip _(recommended)_
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/siyam-sarker/gitbit.git
-cd gitbit
-
-# 2. Create a virtual environment
-python3 -m venv .venv
-
-# 3. Activate it
-source .venv/bin/activate
-
-# 4. Install dependencies
-pip install -r requirements.txt
+pip install git+https://github.com/siyamsarker/gitbit.git
 ```
 
-**Windows**
-
-```bat
-git clone https://github.com/siyam-sarker/gitbit.git
-cd gitbit
-
-python -m venv .venv
-.venv\Scripts\activate
-
-pip install -r requirements.txt
-```
-
-**Verify the setup:**
+Verify the installation:
 
 ```bash
-python -m gitbit --version
-# gitbit, version 0.1.0
+gitbit --version
+```
 
+For a local editable install during development:
+
+```bash
+git clone https://github.com/siyamsarker/gitbit.git
+cd gitbit
+pip install -e ".[dev]"
+```
+
+### Option B — Run from source
+
+```bash
+git clone https://github.com/siyamsarker/gitbit.git
+cd gitbit
+pip install -r requirements.txt
 python -m gitbit --help
 ```
 
 ---
 
-## Uninstall
+## Quick Start
+
+**Mirror a single repository — no config file required:**
 
 ```bash
-# 1. Deactivate the virtual environment (if active)
-deactivate
+gitbit sync \
+  --source git@github.com:your-org/repo.git \
+  --dest   git@backup.example.com:mirrors/repo.git
+```
 
-# 2. Delete the project folder
-rm -rf /path/to/gitbit          # macOS / Linux
-rd /s /q C:\path\to\gitbit      # Windows
+**Mirror all repositories defined in a config file:**
 
-# 3. Optionally remove locally stored mirrors
-rm -rf ~/.gitbit/mirrors        # macOS / Linux
-rd /s /q %USERPROFILE%\.gitbit  # Windows
+```bash
+gitbit sync-all --config repos.json
+```
+
+**Preview what would run without executing anything:**
+
+```bash
+gitbit sync-all --config repos.json --dry-run
 ```
 
 ---
 
 ## Configuration
 
-Gitbit reads a JSON config file that defines one or more repo mappings.
-Copy the bundled example and edit it:
+Gitbit reads repository definitions from a JSON file. Use the provided example as a starting point:
 
 ```bash
 cp repos.example.json repos.json
+$EDITOR repos.json
 ```
 
-**Full schema:**
+> **Note:** `repos.json` may contain sensitive paths and environment variable names. It is listed in `.gitignore` by default and should never be committed to version control.
 
-```jsonc
+### Full configuration reference
+
+```json
 {
   "global": {
-    "parallel": 4,                    // number of repos to process concurrently (1–32)
-    "timeout": 300,                   // per-repo timeout in seconds
-    "verbose": false,                 // enable DEBUG logging
-    "mirrors_dir": "~/.gitbit/mirrors" // where local mirror clones are stored
+    "parallel":    4,
+    "timeout":     300,
+    "verbose":     false,
+    "mirrors_dir": "~/.gitbit/mirrors"
   },
   "repos": [
     {
-      "name": "my-repo",              // unique label; local mirror saved as <name>.git
-      "source": "git@github.com:org/my-repo.git",
-      "dest": "git@backup.example.com:mirrors/my-repo.git",
-      "auth": {
-        "type": "ssh",
-        "private_key": "~/.ssh/id_rsa"  // path to SSH private key; ~ and $VAR expanded
-      },
-      "lfs": false,                   // set true to also mirror LFS objects
-      "submodules": false             // reserved for future use
+      "name":   "ProjectA",
+      "source": "git@github.com:org/ProjectA.git",
+      "dest":   "git@backup.example.com:mirrors/ProjectA.git",
+      "auth":   { "type": "ssh", "private_key": "~/.ssh/id_rsa" },
+      "lfs":    true
     },
     {
-      "name": "another-repo",
-      "source": "https://gitlab.com/team/another-repo.git",
-      "dest": "https://git.example.com/team/another-repo.git",
-      "auth": {
-        "type": "https",
-        "token_env": "GITLAB_TOKEN"   // name of the env var that holds the token
-      },
-      "lfs": false
+      "name":   "RepoB",
+      "source": "https://gitlab.com/team/RepoB.git",
+      "dest":   "https://git.example.com/team/RepoB.git",
+      "auth":   { "type": "https", "token_env": "GITLAB_TOKEN" },
+      "lfs":    false
     }
   ]
 }
 ```
 
-**Auth types:**
+### `global` options
 
-| Type | Required field | How it works |
-|------|---------------|--------------|
-| `ssh` | `private_key` | Sets `GIT_SSH_COMMAND` with the given key |
-| `https` | `token_env` | Reads token from the named env var and injects it into the URL |
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `parallel` | integer | `4` | Maximum number of repositories processed concurrently (1–32) |
+| `timeout` | integer | `300` | Maximum seconds allowed per git operation |
+| `verbose` | boolean | `false` | Enable DEBUG-level logging |
+| `mirrors_dir` | string | `~/.gitbit/mirrors` | Directory where bare mirror clones are stored |
 
-> Tokens are **never** written to config files or log output.
+### `repos[]` options
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Unique label used as the local mirror folder name |
+| `source` | string | Yes | Source repository URL (SSH or HTTPS) |
+| `dest` | string | Yes | Destination repository URL (SSH or HTTPS) |
+| `auth` | object | No | Authentication configuration (see [Authentication](#authentication)) |
+| `lfs` | boolean | No | Transfer Git LFS objects — default `false` |
 
 ---
 
-## Usage
+## Commands
 
-All commands are run from the project root with the virtual environment active.
+All commands accept `-h` or `--help` for detailed usage information.
 
-### sync — mirror a single repo
-
-Use this for a quick one-off mirror without a config file.
+### `sync-all` — full pipeline for all repositories
 
 ```bash
-python -m gitbit sync --source <SOURCE_URL> --dest <DEST_URL>
+gitbit sync-all -c repos.json [OPTIONS]
 ```
 
-**Examples:**
+Runs the complete mirroring pipeline for every repository defined in the config: clone or fetch from source, optionally fetch LFS objects, then push all refs to the destination.
+
+### `import-all` — fetch sources only
 
 ```bash
-# SSH to SSH
-python -m gitbit sync \
-  --source git@github.com:org/my-repo.git \
-  --dest   git@backup.example.com:mirrors/my-repo.git
-
-# HTTPS to HTTPS (token read from env var)
-GITHUB_TOKEN=ghp_xxx \
-python -m gitbit sync \
-  --source https://github.com/org/my-repo.git \
-  --dest   https://git.company.com/org/my-repo.git
-
-# With a custom local mirror name and LFS enabled
-python -m gitbit sync \
-  --source git@github.com:org/my-repo.git \
-  --dest   git@backup.example.com:mirrors/my-repo.git \
-  --name   my-repo \
-  --lfs
-
-# Custom mirrors directory and timeout
-python -m gitbit sync \
-  --source git@github.com:org/my-repo.git \
-  --dest   git@backup.example.com:mirrors/my-repo.git \
-  --mirrors-dir /data/mirrors \
-  --timeout 600
+gitbit import-all -c repos.json [OPTIONS]
 ```
 
-**All `sync` flags:**
+Clones or fetches each source repository into the local mirror directory. Does **not** push to destinations. Use this to stage updates before a separate `export-all` step, or when you need to inspect mirrors before distributing them.
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--source` | required | Source Git URL |
-| `--dest` | required | Destination Git URL |
+### `export-all` — push to destinations only
+
+```bash
+gitbit export-all -c repos.json [OPTIONS]
+```
+
+Pushes each local mirror to its configured destination. Local mirrors must already exist — run `import-all` first, or use `sync-all` to perform both steps in one command.
+
+### `sync` — ad-hoc single repository
+
+```bash
+gitbit sync --source <URL> --dest <URL> [OPTIONS]
+```
+
+Mirrors a single repository without requiring a config file. Credentials are picked up from the SSH agent or environment variables automatically.
+
+| Option | Default | Description |
+|---|---|---|
+| `--source` | _(required)_ | Source repository URL |
+| `--dest` | _(required)_ | Destination repository URL |
 | `--name` | `adhoc` | Label for the local mirror directory |
-| `--lfs` | off | Also mirror LFS objects |
-| `--mirrors-dir` | `~/.gitbit/mirrors` | Where to store the local mirror |
+| `--lfs` | off | Also mirror Git LFS objects |
+| `--mirrors-dir` | `~/.gitbit/mirrors` | Directory for local mirror storage |
 | `--dry-run` | off | Print commands without executing |
-| `--timeout` | `300` | Timeout in seconds |
-| `--verbose` | off | Enable DEBUG logging |
+| `--timeout` | `300` | Maximum seconds per operation |
+| `--verbose` | off | Enable DEBUG-level logging |
 
----
+### Shared options _(all batch commands)_
 
-### sync-all — mirror all repos from config
-
-Runs a full import (clone/fetch) then export (push) for every repo in the config file.
-
-```bash
-python -m gitbit sync-all -c repos.json
-```
-
-**Examples:**
-
-```bash
-# Basic sync of all repos
-python -m gitbit sync-all -c repos.json
-
-# Run 8 repos in parallel with a 10-minute timeout
-python -m gitbit sync-all -c repos.json --parallel 8 --timeout 600
-
-# Preview what would run without executing anything
-python -m gitbit sync-all -c repos.json --dry-run
-
-# Show detailed logs
-python -m gitbit sync-all -c repos.json --verbose
-```
-
----
-
-### import-all — fetch only
-
-Clones new repos or fetches updates into existing local mirrors. Does **not** push to destinations.
-Useful to pull down changes first and push later.
-
-```bash
-python -m gitbit import-all -c repos.json
-```
-
-**Examples:**
-
-```bash
-# Fetch all sources into local mirrors
-python -m gitbit import-all -c repos.json
-
-# Dry-run to see what would be cloned/fetched
-python -m gitbit import-all -c repos.json --dry-run
-
-# Use 4 parallel workers
-python -m gitbit import-all -c repos.json --parallel 4
-```
-
----
-
-### export-all — push only
-
-Pushes all existing local mirrors to their destinations. Does **not** fetch from sources first.
-Requires `import-all` to have been run at least once.
-
-```bash
-python -m gitbit export-all -c repos.json
-```
-
-**Examples:**
-
-```bash
-# Push all mirrors to destinations
-python -m gitbit export-all -c repos.json
-
-# Dry-run
-python -m gitbit export-all -c repos.json --dry-run
-
-# Verbose output
-python -m gitbit export-all -c repos.json --verbose
-```
-
----
-
-### Flags reference
-
-**Flags shared by `sync-all`, `import-all`, `export-all`:**
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-c, --config` | required | Path to the JSON config file |
-| `--parallel N` | from config | Number of repos to process concurrently |
-| `--timeout N` | from config | Per-repo timeout in seconds |
-| `--dry-run` | off | Print commands without executing |
-| `--verbose` | off | Enable DEBUG logging |
-
----
-
-### Dry-run mode
-
-Add `--dry-run` to any command to print every git command that *would* run without actually
-executing it. Nothing is cloned, fetched, or pushed.
-
-```bash
-python -m gitbit sync-all  -c repos.json --dry-run
-python -m gitbit import-all -c repos.json --dry-run
-python -m gitbit export-all -c repos.json --dry-run
-
-python -m gitbit sync \
-  --source git@github.com:org/repo.git \
-  --dest   git@backup.example.com:mirrors/repo.git \
-  --dry-run
-```
-
----
-
-### Verbose logging
-
-Add `--verbose` to see DEBUG-level output including every git command, retry attempts, and
-timing information.
-
-```bash
-python -m gitbit sync-all -c repos.json --verbose
-```
+| Option | Description |
+|---|---|
+| `-c FILE` | Path to the JSON configuration file _(required)_ |
+| `--dry-run` | Print each git command without executing it |
+| `--parallel N` | Override the `parallel` value from config |
+| `--timeout SECONDS` | Override the `timeout` value from config |
+| `--verbose` | Enable DEBUG-level logging |
 
 ---
 
@@ -330,87 +233,60 @@ python -m gitbit sync-all -c repos.json --verbose
 
 ### SSH
 
-Set `"type": "ssh"` and point `"private_key"` to your key file. Gitbit sets `GIT_SSH_COMMAND`
-automatically — no `ssh-agent` required.
+Gitbit sets `GIT_SSH_COMMAND` to use the specified private key with `StrictHostKeyChecking=accept-new` and `BatchMode=yes`, ensuring fully non-interactive operation. Key paths support `~` and environment variable expansion.
 
-```jsonc
-"auth": {
-  "type": "ssh",
-  "private_key": "~/.ssh/id_rsa"
-}
+If no `auth` block is provided, Gitbit inherits the SSH agent and default keys from the calling environment.
+
+```json
+{ "type": "ssh", "private_key": "~/.ssh/id_deploy" }
 ```
 
-### HTTPS
+### HTTPS (token-based)
 
-Set `"type": "https"` and name the environment variable that holds your token.
-The token is read at runtime and injected into the URL — it never touches the config file or logs.
-
-```jsonc
-"auth": {
-  "type": "https",
-  "token_env": "GITHUB_TOKEN"
-}
-```
-
-Then export the token before running:
+Set the environment variable referenced by `token_env` before invoking Gitbit:
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
-python -m gitbit sync-all -c repos.json
+gitbit sync-all -c repos.json
 ```
+
+```json
+{ "type": "https", "token_env": "GITHUB_TOKEN" }
+```
+
+The token is read from the environment at runtime, injected into the URL as `oauth2:<token>@host`, and never written to disk or printed in logs.
 
 ---
 
-## Exit codes
+## Security
+
+Gitbit is designed with credential safety and subprocess hygiene as first-class concerns.
+
+- **No shell injection** — all subprocess calls use list arguments; `shell=True` is never used.
+- **SSH key path quoting** — key paths are shell-quoted via `shlex.quote()` before being placed in `GIT_SSH_COMMAND`, preventing issues with spaces or special characters.
+- **Credential isolation** — HTTPS tokens are read from environment variables at runtime, not stored in the config file.
+- **Log sanitisation** — credentials are stripped from every log message before output; tokens never appear in `--verbose` traces.
+- **Config file hygiene** — `repos.json` is listed in `.gitignore` by default. Do not commit it to version control.
+
+---
+
+## Exit Codes
 
 | Code | Meaning |
-|------|---------|
-| `0` | All repos completed successfully |
-| `1` | One or more repos failed, or a config/auth error occurred |
+|---|---|
+| `0` | All repositories processed successfully |
+| `1` | One or more repositories failed, or invalid input was provided |
+
+Failed repositories are reported in the summary output and do not interrupt processing of other repositories in the batch.
 
 ---
 
 ## Contributing
 
-### Setup
-
-```bash
-git clone https://github.com/siyam-sarker/gitbit.git
-cd gitbit
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-pip install pytest pytest-cov pytest-mock flake8 black isort mypy
-```
-
-### Running tests
-
-```bash
-pytest                          # all tests with coverage
-pytest tests/test_config.py -v  # single module
-pytest -s --log-cli-level=DEBUG # with debug output
-```
-
-### Coding standards
-
-| Tool | Purpose |
-|------|---------|
-| `black` | Formatter — line length 100 |
-| `isort` | Import sorter |
-| `flake8` | Linter |
-| `mypy --strict` | Type checker |
-
-### Commit style
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
-`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`
-
-### Reporting security issues
-
-Do not open a public issue. Email `siyam.ts@gmail.com` instead.
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ---
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 Siyam Sarker
+Released under the [MIT License](LICENSE).
