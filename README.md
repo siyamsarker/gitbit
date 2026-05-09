@@ -29,13 +29,11 @@ On the first run Gitbit clones the source as a bare mirror. Every run after that
 
 ---
 
-## Table of Contents
+**Contents**
 
 - [Features](#features)
 - [Requirements](#requirements)
-- [Installation](#installation)
-- [Uninstallation](#uninstallation)
-- [Updating](#updating)
+- [Installation](#installation) — [Uninstalling](#uninstalling) · [Updating](#updating)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Commands](#commands)
@@ -127,9 +125,8 @@ cd gitbit
 pip install -e ".[dev]"
 ```
 
----
 
-## Uninstallation
+### Uninstalling
 
 ```bash
 # pipx
@@ -142,9 +139,7 @@ pip uninstall gitbit
 rm -rf /path/to/gitbit
 ```
 
----
-
-## Updating
+### Updating
 
 ```bash
 # pipx
