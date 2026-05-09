@@ -271,7 +271,9 @@ class TestPushMirror:
         )
         args = mock_run.call_args[0][0]
         assert "push" in args
-        assert "--mirror" in args
+        assert "--prune" in args
+        assert "refs/*" in args
+        assert "^refs/merge-requests/*" in args
 
     def test_dry_run_does_not_call_subprocess(self, mocker, tmp_path: Path) -> None:
         mock_run = mocker.patch("subprocess.run")

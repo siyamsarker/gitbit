@@ -509,3 +509,85 @@ class TestFormatAge:
         from gitbit.cli import _format_age
         import time
         assert "d ago" in _format_age(time.time() - 172800)
+
+
+class TestCommandFilter:
+    def test_filter_injects_command_into_record(self) -> None:
+        from gitbit.cli import _CommandFilter
+        import logging
+
+        f = _CommandFilter("sync-all")
+        record = logging.LogRecord(
+            name="gitbit.sync", level=logging.INFO,
+            pathname="", lineno=0, msg="test", args=(), exc_info=None,
+        )
+        f.filter(record)
+        assert record.command == "sync-all"  # type: ignore[attr-defined]
+
+    def test_filter_is_on_file_handler_not_root_logger(self, tmp_path) -> None:
+        """Filter must be on the file handler so propagated records from child
+        loggers (e.g. worker threads) have %(command)s injected before formatting."""
+        import logging
+        from logging.handlers import RotatingFileHandler
+        from gitbit.cli import _setup_logging, _CommandFilter
+
+        _setup_logging(verbose=False, command="test-cmd")
+        root = logging.getLogger()
+        try:
+            root_filter_types = [type(f).__name__ for f in root.filters]
+            assert "_CommandFilter" not in root_filter_types, (
+                "_CommandFilter must NOT be on the root logger; it must be on the "
+                "file handler so propagated records from child loggers are covered."
+            )
+            file_hdlr = next(
+                (h for h in root.handlers if isinstance(h, RotatingFileHandler)), None
+            )
+            assert file_hdlr is not None
+            handler_filter_types = [type(f).__name__ for f in file_hdlr.filters]
+            assert "_CommandFilter" in handler_filter_types
+        finally:
+            root.handlers.clear()
+            root.filters.clear()
+
+    def test_child_logger_record_gets_command_via_handler_filter(self) -> None:
+        """Records from child loggers (gitbit.sync, git_ops) propagating to root
+        must have record.command set by the handler filter — not a root logger filter."""
+        import logging
+        from concurrent.futures import ThreadPoolExecutor
+        from logging.handlers import RotatingFileHandler
+        from gitbit.cli import _setup_logging
+
+        captured: list = []
+
+        class CapturingHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                captured.append(getattr(record, "command", "MISSING"))
+
+        _setup_logging(verbose=False, command="sync-all")
+        root = logging.getLogger()
+        try:
+            file_hdlr = next(h for h in root.handlers if isinstance(h, RotatingFileHandler))
+            capturing = CapturingHandler()
+            for f in file_hdlr.filters:
+                capturing.addFilter(f)
+            root.handlers = [
+                h for h in root.handlers if not isinstance(h, RotatingFileHandler)
+            ]
+            root.addHandler(capturing)
+
+            child = logging.getLogger("gitbit.sync")
+
+            def worker():
+                child.info("message from worker thread")
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(worker).result()
+
+            assert len(captured) == 1
+            assert captured[0] == "sync-all", (
+                f"Expected 'sync-all' but got {captured[0]!r}. "
+                "Filter is likely on the root logger instead of the handler."
+            )
+        finally:
+            root.handlers.clear()
+            root.filters.clear()

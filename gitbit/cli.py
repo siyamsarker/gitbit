@@ -129,11 +129,18 @@ def _setup_logging(verbose: bool, command: str = "gitbit") -> None:
         datefmt="%Y-%m-%dT%H:%M:%S",
     ))
 
+    # Attach the filter to the file_handler, NOT the root logger.
+    # Logger-level filters are only applied to records logged directly to that
+    # logger; records that propagate from child loggers (gitbit.sync, git_ops,
+    # worker threads) bypass the root logger's own filter() call via
+    # callHandlers(). Attaching to the handler ensures _CommandFilter.filter()
+    # is called for every record the handler processes, regardless of origin.
+    file_handler.addFilter(_CommandFilter(command))
+
     root = logging.getLogger()
     root.setLevel(level)
     root.handlers.clear()
     root.filters.clear()
-    root.addFilter(_CommandFilter(command))
     root.addHandler(console_handler)
     root.addHandler(file_handler)
 
