@@ -775,7 +775,7 @@ def status_cmd(config_path: str, verbose: bool) -> None:
         f"  {'NAME':<{name_w}}  {'MIRROR':<9}  {'SIZE':<11}  {'LAST MODIFIED':<22}  {'LAST SYNC':<12}  STATUS"
     )
     click.echo(
-        f"  {'-' * name_w}  {'-' * 7}  {'-' * 9}  {'-' * 20}  {'-' * 10}  {'-' * 7}"
+        f"  {'-' * name_w}  {'-' * 9}  {'-' * 11}  {'-' * 22}  {'-' * 12}  {'-' * 7}"
     )
 
     for s in statuses:
