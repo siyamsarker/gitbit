@@ -145,19 +145,79 @@ def _setup_logging(verbose: bool, command: str = "gitbit") -> None:
     root.addHandler(file_handler)
 
 
-@click.group(context_settings=CONTEXT_SETTINGS)
+# ---------------------------------------------------------------------------
+# Custom help renderer
+# ---------------------------------------------------------------------------
+
+class _GitbitGroup(click.Group):
+    """Click Group subclass that renders a styled, modern help screen."""
+
+    def get_help(self, ctx: click.Context) -> str:
+        # Use colors only when writing to a real terminal (respects NO_COLOR).
+        color = sys.stdout.isatty() and "NO_COLOR" not in os.environ
+
+        def s(text: str, *codes: str) -> str:
+            """Wrap text in ANSI SGR codes when color is enabled."""
+            return f"\033[{';'.join(codes)}m{text}\033[0m" if color else text
+
+        def section(label: str, width: int = 68) -> str:
+            """Return a styled "── LABEL ─────" divider filling `width` columns."""
+            prefix = "  ── "          # "  ── "
+            fill = max(0, width - len(prefix) - len(label) - 1)
+            line = prefix + label + " " + "─" * fill
+            return s(line, "1", "33")           # bold yellow
+
+        def cmd_row(name: str, desc: str) -> str:
+            return f"    {s(f'{name:<12}', '1', '32')}  {desc}"
+
+        def short(name: str) -> str:
+            cmd = self.commands.get(name)
+            return cmd.get_short_help_str(limit=70) if cmd else ""
+
+        lines = [
+            "",
+            (
+                f"  {s('gitbit', '1', '36')}"
+                f"  {s('v' + __version__, '90')}"
+                f"  {s(chr(183), '90')}"        # · middle dot
+                f"  {s('Mirror Git repositories with full ref fidelity', '2')}"
+            ),
+            "",
+            (
+                f"  {s('Usage:', '1')}"
+                f"  gitbit"
+                f"  {s('[OPTIONS]', '90')}"
+                f"  {s('COMMAND', '1')}"
+                f"  {s('[ARGS]...', '90')}"
+            ),
+            "",
+            section("Batch Commands"),
+            cmd_row("sync-all",   short("sync-all")),
+            cmd_row("import-all", short("import-all")),
+            cmd_row("export-all", short("export-all")),
+            "",
+            section("Single Repository"),
+            cmd_row("sync",       short("sync")),
+            "",
+            section("Inspect & Verify"),
+            cmd_row("validate",   short("validate")),
+            cmd_row("status",     short("status")),
+            cmd_row("logs",       short("logs")),
+            "",
+            section("Options"),
+            f"    {s('--version', '1')}      Show the version and exit.",
+            f"    {s('-h, --help', '1')}     Show this message and exit.",
+            "",
+            "  " + s("Run 'gitbit COMMAND --help' for detailed help on any command.", "2"),
+            "",
+        ]
+        return "\n".join(lines)
+
+
+@click.group(cls=_GitbitGroup, context_settings=CONTEXT_SETTINGS)
 @click.version_option(__version__, prog_name="gitbit")
 def main() -> None:
-    """Gitbit — Mirror Git repositories with full ref fidelity.
-
-    \b
-    Clones every ref (branches, tags, notes) from a source and pushes them
-    to a destination using git clone --mirror and git push --mirror.
-    Supports SSH and HTTPS auth, Git LFS, parallel execution, and
-    automatic retries with exponential backoff.
-
-    Run 'gitbit COMMAND -h' for detailed help on any command.
-    """
+    """Gitbit — mirror Git repositories with full ref fidelity."""
 
 
 # ---------------------------------------------------------------------------

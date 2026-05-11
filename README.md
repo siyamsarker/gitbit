@@ -8,7 +8,7 @@ Branches, tags, notes, and LFS objects — all of it, exactly as-is.
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue?style=flat-square)](https://www.python.org/downloads/)
 [![MIT License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000?style=flat-square)](https://github.com/psf/black)
-[![Version](https://img.shields.io/badge/version-0.3.3-informational?style=flat-square)](https://github.com/siyamsarker/gitbit)
+[![Version](https://img.shields.io/badge/version-0.3.4-informational?style=flat-square)](https://github.com/siyamsarker/gitbit)
 
 </div>
 
