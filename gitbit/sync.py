@@ -108,17 +108,17 @@ class RepoStatus:
 def _mirrors_path(mirrors_dir: str, name: str) -> str:
     """Compute the absolute path for a named repository's mirror directory.
 
-    Bare git mirrors follow the convention of ending with '.git'. Each repo
-    in a batch gets its own subdirectory named after its repo config name.
+    Each repo gets its own subdirectory named directly after its repo config
+    name — no .git suffix appended.
 
     Args:
         mirrors_dir: Root directory where all mirror clones are stored.
         name:        Repository name (from RepoConfig.name).
 
     Returns:
-        Absolute path string: <mirrors_dir>/<name>.git
+        Absolute path string: <mirrors_dir>/<name>
     """
-    return str(Path(mirrors_dir) / f"{name}.git")
+    return str(Path(mirrors_dir) / name)
 
 
 def _dir_size_mb(path: str) -> float:

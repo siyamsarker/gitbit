@@ -48,7 +48,7 @@ class TestImportRepo:
         mock_clone = mocker.patch("gitbit.sync.git_ops.clone_mirror")
         mock_fetch = mocker.patch("gitbit.sync.git_ops.fetch_mirror")
         # Create the mirror directory so it appears to exist
-        local_dir = tmp_path / "TestRepo.git"
+        local_dir = tmp_path / "TestRepo"
         local_dir.mkdir()
         repo = _make_repo()
         result = import_repo(repo, str(tmp_path), timeout=60, dry_run=False)
@@ -96,7 +96,7 @@ class TestImportRepo:
 
 class TestExportRepo:
     def test_push_called_when_local_dir_exists(self, mocker, tmp_path: Path) -> None:
-        local_dir = tmp_path / "TestRepo.git"
+        local_dir = tmp_path / "TestRepo"
         local_dir.mkdir()
         mock_push = mocker.patch("gitbit.sync.git_ops.push_mirror")
         repo = _make_repo()
@@ -119,7 +119,7 @@ class TestExportRepo:
         assert result.success is True
 
     def test_lfs_push_called_when_lfs_true(self, mocker, tmp_path: Path) -> None:
-        local_dir = tmp_path / "LFSRepo.git"
+        local_dir = tmp_path / "LFSRepo"
         local_dir.mkdir()
         mocker.patch("gitbit.sync.git_ops.push_mirror")
         mock_lfs = mocker.patch("gitbit.sync.git_ops.lfs_push_all")
@@ -129,7 +129,7 @@ class TestExportRepo:
         assert result.success is True
 
     def test_lfs_push_not_called_when_lfs_false(self, mocker, tmp_path: Path) -> None:
-        local_dir = tmp_path / "TestRepo.git"
+        local_dir = tmp_path / "TestRepo"
         local_dir.mkdir()
         mocker.patch("gitbit.sync.git_ops.push_mirror")
         mock_lfs = mocker.patch("gitbit.sync.git_ops.lfs_push_all")
@@ -138,7 +138,7 @@ class TestExportRepo:
         mock_lfs.assert_not_called()
 
     def test_push_failure_returns_failure_result(self, mocker, tmp_path: Path) -> None:
-        local_dir = tmp_path / "TestRepo.git"
+        local_dir = tmp_path / "TestRepo"
         local_dir.mkdir()
         mocker.patch(
             "gitbit.sync.git_ops.push_mirror",
@@ -263,7 +263,7 @@ class TestGetRepoStatus:
         assert status.last_modified is None
 
     def test_existing_mirror_returns_present(self, tmp_path: Path) -> None:
-        mirror = tmp_path / "TestRepo.git"
+        mirror = tmp_path / "TestRepo"
         mirror.mkdir()
         (mirror / "HEAD").write_text("ref: refs/heads/main\n")
         repo = _make_repo("TestRepo")
@@ -275,10 +275,10 @@ class TestGetRepoStatus:
     def test_mirror_path_is_correct(self, tmp_path: Path) -> None:
         repo = _make_repo("MyRepo")
         status = get_repo_status(repo, str(tmp_path))
-        assert status.mirror_path.endswith("MyRepo.git")
+        assert status.mirror_path.endswith("MyRepo")
 
     def test_size_reflects_file_contents(self, tmp_path: Path) -> None:
-        mirror = tmp_path / "SizedRepo.git"
+        mirror = tmp_path / "SizedRepo"
         mirror.mkdir()
         (mirror / "packfile").write_bytes(b"x" * 1024 * 512)  # 512 KB
         repo = _make_repo("SizedRepo")
@@ -288,7 +288,7 @@ class TestGetRepoStatus:
     def test_dir_size_handles_oserror_gracefully(self, tmp_path: Path, mocker) -> None:
         from gitbit.sync import _dir_size_mb
 
-        mirror = tmp_path / "ErrRepo.git"
+        mirror = tmp_path / "ErrRepo"
         mirror.mkdir()
         (mirror / "HEAD").write_text("ref: refs/heads/main\n")
         mocker.patch("os.path.getsize", side_effect=OSError("gone"))
@@ -298,7 +298,7 @@ class TestGetRepoStatus:
     def test_dir_last_modified_handles_oserror_gracefully(self, tmp_path: Path, mocker) -> None:
         from gitbit.sync import _dir_last_modified
 
-        mirror = tmp_path / "ErrRepo.git"
+        mirror = tmp_path / "ErrRepo"
         mirror.mkdir()
         (mirror / "HEAD").write_text("ref: refs/heads/main\n")
         mocker.patch("os.path.getmtime", side_effect=OSError("gone"))
