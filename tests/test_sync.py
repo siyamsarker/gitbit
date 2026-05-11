@@ -304,3 +304,82 @@ class TestGetRepoStatus:
         mocker.patch("os.path.getmtime", side_effect=OSError("gone"))
         result = _dir_last_modified(str(mirror))
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# run_parallel — fail_fast branch
+# ---------------------------------------------------------------------------
+
+
+class TestRunParallelFailFast:
+    def test_fail_fast_marks_remaining_repos_skipped(self, tmp_path: Path) -> None:
+        """fail_fast=True: repos that are still pending (not yet dequeued) when
+        the first failure is processed must be cancelled and appear in results
+        with 'skipped' in their message.
+
+        Setup: workers=4, 7 repos.  A fails quickly.  B/C/D block permanently
+        (keeping their 3 worker threads occupied so the 4th is the one that ran
+        A).  E/F/G also block briefly — this ensures the worker thread freed by
+        A can pick up E but F and G remain in the queue long enough for
+        Future.cancel() to succeed on them.
+        After run_parallel returns, both blocking events are released.
+        """
+        import threading
+        import time as _t
+
+        repos = [_make_repo(f"Repo{c}") for c in ["A", "B", "C", "D", "E", "F", "G"]]
+
+        blockers_release = threading.Event()  # releases B, C, D
+        efg_release = threading.Event()       # releases E, F, G
+
+        def op(repo, mirrors_dir, *, env=None, timeout=300, dry_run=False):
+            if repo.name == "RepoA":
+                _t.sleep(0.05)
+                return RepoResult(name="RepoA", success=False, message="clone failed")
+            if repo.name in ("RepoB", "RepoC", "RepoD"):
+                blockers_release.wait(timeout=10)
+                return RepoResult(name=repo.name, success=True, message="ok")
+            # RepoE/F/G: also block so the worker freed by A doesn't pick them
+            # up before cancel() is called for F and G.
+            efg_release.wait(timeout=10)
+            return RepoResult(name=repo.name, success=True, message="ok")
+
+        results = run_parallel(
+            op,
+            repos,
+            str(tmp_path),
+            workers=4,
+            timeout=60,
+            dry_run=False,
+            fail_fast=True,
+        )
+        # Release all blocked workers (cleanup).
+        efg_release.set()
+        blockers_release.set()
+
+        failed = [r for r in results if not r.success and "skipped" not in r.message]
+        skipped = [r for r in results if "skipped" in r.message]
+
+        # RepoA must be the failure that triggered fail-fast.
+        assert len(failed) >= 1
+        assert any(r.name == "RepoA" for r in failed)
+        # At least some repos were skipped (F and G reliably are).
+        assert len(skipped) >= 1
+        assert all("RepoA" in r.message for r in skipped)
+
+    def test_fail_fast_false_runs_all_repos(self, tmp_path: Path) -> None:
+        """With fail_fast=False, all repos run even after a failure."""
+        repos = [_make_repo(f"Repo{c}") for c in ["A", "B", "C"]]
+
+        def first_fails(repo, mirrors_dir, *, env=None, timeout=300, dry_run=False):
+            if repo.name == "RepoA":
+                return RepoResult(name="RepoA", success=False, message="failed")
+            return RepoResult(name=repo.name, success=True, message="ok")
+
+        results = run_parallel(
+            first_fails, repos, str(tmp_path),
+            workers=1, timeout=60, dry_run=False, fail_fast=False,
+        )
+        assert len(results) == 3
+        skipped = [r for r in results if "skipped" in r.message]
+        assert len(skipped) == 0   # no skips when fail_fast=False
